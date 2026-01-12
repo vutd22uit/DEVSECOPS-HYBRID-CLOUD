@@ -1,0 +1,215 @@
+# ================================================================= #
+# FoodHub Demo Environment - All Services
+# ================================================================= #
+# This docker-compose runs the complete application locally for demo
+# Usage: docker-compose -f docker-compose.demo.yml up -d
+# ================================================================= #
+
+version: '3.8'
+
+services:
+  # ==========================================
+  # Database - PostgreSQL
+  # ==========================================
+  postgresql:
+    image: postgres:16-alpine
+    container_name: foodhub-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: foodhub
+      POSTGRES_USER: foodhub_admin
+      POSTGRES_PASSWORD: FoodHub12345
+      POSTGRES_MULTIPLE_DATABASES: foodhub_users,foodhub_products,foodhub_orders
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-multiple-databases.sh:/docker-entrypoint-initdb.d/init-databases.sh:ro
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U foodhub_admin -d foodhub" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - foodhub-network
+
+  # ==========================================
+  # Backend Services
+  # ==========================================
+  users-service:
+    build:
+      context: ./services/users
+      dockerfile: Dockerfile
+    container_name: foodhub-users
+    restart: unless-stopped
+    ports:
+      - "8082:8082"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgresql:5432/foodhub_users
+      - SPRING_DATASOURCE_USERNAME=foodhub_admin
+      - SPRING_DATASOURCE_PASSWORD=FoodHub12345
+      - SERVER_PORT=8082
+    depends_on:
+      postgresql:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "wget", "-q", "--spider", "http://localhost:8082/actuator/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - foodhub-network
+
+  products-service:
+    build:
+      context: ./services/products
+      dockerfile: Dockerfile
+    container_name: foodhub-products
+    restart: unless-stopped
+    ports:
+      - "8083:8083"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgresql:5432/foodhub_products
+      - SPRING_DATASOURCE_USERNAME=foodhub_admin
+      - SPRING_DATASOURCE_PASSWORD=FoodHub12345
+      - SERVER_PORT=8083
+    depends_on:
+      postgresql:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "wget", "-q", "--spider", "http://localhost:8083/actuator/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - foodhub-network
+
+  orders-service:
+    build:
+      context: ./services/orders
+      dockerfile: Dockerfile
+    container_name: foodhub-orders
+    restart: unless-stopped
+    ports:
+      - "8084:8084"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgresql:5432/foodhub_orders
+      - SPRING_DATASOURCE_USERNAME=foodhub_admin
+      - SPRING_DATASOURCE_PASSWORD=FoodHub12345
+      - SERVER_PORT=8084
+      - USERS_SERVICE_URL=http://users-service:8082
+      - PRODUCTS_SERVICE_URL=http://products-service:8083
+    depends_on:
+      postgresql:
+        condition: service_healthy
+      users-service:
+        condition: service_started
+      products-service:
+        condition: service_started
+    healthcheck:
+      test: [ "CMD", "wget", "-q", "--spider", "http://localhost:8084/actuator/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - foodhub-network
+
+  # ==========================================
+  # Frontend Service
+  # ==========================================
+  frontend:
+    build:
+      context: ./services/frontend
+      dockerfile: Dockerfile
+    container_name: foodhub-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_USERS_SERVICE_URL=http://localhost:8082
+      - NEXT_PUBLIC_PRODUCTS_SERVICE_URL=http://localhost:8083
+      - NEXT_PUBLIC_ORDERS_SERVICE_URL=http://localhost:8084
+    depends_on:
+      - users-service
+      - products-service
+      - orders-service
+    networks:
+      - foodhub-network
+
+  # ==========================================
+  # CI/CD Tools (Optional - for demo)
+  # ==========================================
+  jenkins:
+    build:
+      context: ./jenkins
+      dockerfile: Dockerfile
+    container_name: jenkins-hybrid-cloud
+    restart: unless-stopped
+    privileged: true
+    user: root
+    ports:
+      - "8080:8080"
+      - "50000:50000"
+    volumes:
+      - jenkins_home:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./scripts:/var/jenkins_home/scripts:ro
+    environment:
+      - JAVA_OPTS=-Djenkins.install.runSetupWizard=false
+      - JENKINS_ADMIN_ID=admin
+      - JENKINS_ADMIN_PASSWORD=admin123
+    networks:
+      - foodhub-network
+
+  sonarqube:
+    image: sonarqube:10-community
+    container_name: sonarqube-local
+    restart: unless-stopped
+    ports:
+      - "9000:9000"
+    environment:
+      - SONAR_ES_BOOTSTRAP_CHECKS_DISABLE=true
+      - SONAR_JDBC_URL=jdbc:postgresql://sonarqube-db:5432/sonar
+      - SONAR_JDBC_USERNAME=sonar
+      - SONAR_JDBC_PASSWORD=sonar
+    volumes:
+      - sonarqube_data:/opt/sonarqube/data
+      - sonarqube_logs:/opt/sonarqube/logs
+      - sonarqube_extensions:/opt/sonarqube/extensions
+    depends_on:
+      - sonarqube-db
+    networks:
+      - foodhub-network
+
+  sonarqube-db:
+    image: postgres:16-alpine
+    container_name: sonarqube-db
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=sonar
+      - POSTGRES_PASSWORD=sonar
+      - POSTGRES_DB=sonar
+    volumes:
+      - sonarqube_postgresql:/var/lib/postgresql/data
+    networks:
+      - foodhub-network
+
+volumes:
+  postgres_data:
+  jenkins_home:
+  sonarqube_data:
+  sonarqube_logs:
+  sonarqube_extensions:
+  sonarqube_postgresql:
+
+
+networks:
+  foodhub-network:
+    driver: bridge

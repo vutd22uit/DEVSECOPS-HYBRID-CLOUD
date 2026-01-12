@@ -1,0 +1,54 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: foodhub-ingress
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
+    # Enable CORS
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "*"
+    # Rate limiting
+    nginx.ingress.kubernetes.io/limit-rps: "100"
+    nginx.ingress.kubernetes.io/limit-connections: "50"
+spec:
+  ingressClassName: nginx
+  rules:
+    # Frontend (default)
+    - host: foodhub.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: foodhub-frontend
+                port:
+                  number: 3000
+    # API Gateway pattern
+    - host: api.foodhub.local
+      http:
+        paths:
+          - path: /users
+            pathType: Prefix
+            backend:
+              service:
+                name: foodhub-users
+                port:
+                  number: 8082
+          - path: /products
+            pathType: Prefix
+            backend:
+              service:
+                name: foodhub-products
+                port:
+                  number: 8083
+          - path: /orders
+            pathType: Prefix
+            backend:
+              service:
+                name: foodhub-orders
+                port:
+                  number: 8084

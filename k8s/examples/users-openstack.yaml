@@ -1,0 +1,117 @@
+# ================================================================= #
+# Kubernetes Deployment Manifest for Users Service
+# Cloud Provider: OpenStack
+# ================================================================= #
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: users-service
+  namespace: foodhub
+  labels:
+    app: users
+    cloud: openstack
+    tier: backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: users
+  template:
+    metadata:
+      labels:
+        app: users
+        cloud: openstack
+        tier: backend
+    spec:
+      containers:
+      - name: users
+        image: harbor.example.com/foodhub/foodhub-users:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8082
+          protocol: TCP
+        env:
+        - name: SPRING_PROFILES_ACTIVE
+          value: "production"
+        - name: DB_HOST
+          value: "users-db.foodhub.svc.cluster.local"
+        - name: DB_PORT
+          value: "5432"
+        - name: DB_NAME
+          value: "users_db"
+        envFrom:
+        - secretRef:
+            name: users-db-credentials
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /actuator/health
+            port: 8082
+          initialDelaySeconds: 60
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /actuator/health
+            port: 8082
+          initialDelaySeconds: 30
+          periodSeconds: 5
+      imagePullSecrets:
+      - name: harbor-registry-secret
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: users-service
+  namespace: foodhub
+  labels:
+    app: users
+    cloud: openstack
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8082
+    targetPort: 8082
+    protocol: TCP
+    name: http
+  selector:
+    app: users
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: users-ingress
+  namespace: foodhub
+  annotations:
+    kubernetes.io/ingress.class: nginx
+spec:
+  rules:
+  - host: users.foodhub.openstack.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: users-service
+            port:
+              number: 8082
+---
+# values.yaml - Updated by Jenkins Pipeline
+# This file is used by the pipeline to track image versions
+image:
+  repository: harbor.example.com/foodhub/foodhub-users
+  tag: latest
+  pullPolicy: Always
+
+replicas: 2
+
+service:
+  type: ClusterIP
+  port: 8082

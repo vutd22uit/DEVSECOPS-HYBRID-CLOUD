@@ -1,0 +1,84 @@
+version: '3.8'
+
+services:
+  # ==========================================
+  # Jenkins Controller with Custom Image
+  # ==========================================
+  jenkins:
+    build:
+      context: ./jenkins
+      dockerfile: Dockerfile
+    container_name: jenkins-hybrid-cloud
+    restart: unless-stopped
+    privileged: true
+    user: root
+    ports:
+      - "8080:8080" # Jenkins Web UI
+      - "50000:50000" # Jenkins Agent
+    volumes:
+      - jenkins_home:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock # Docker-in-Docker
+      - ./scripts:/var/jenkins_home/scripts:ro
+      - ~/.aws:/root/.aws:ro # AWS credentials
+      - ~/.kube:/root/.kube:ro # Kubernetes config
+    environment:
+      - JAVA_OPTS=-Djenkins.install.runSetupWizard=false
+      - JENKINS_ADMIN_ID=admin
+      - JENKINS_ADMIN_PASSWORD=admin123
+    networks:
+      - devops-network
+
+  # ==========================================
+  # SonarQube for Code Quality Analysis
+  # ==========================================
+  sonarqube:
+    image: sonarqube:10-community
+    container_name: sonarqube-local
+    restart: unless-stopped
+    ports:
+      - "9000:9000"
+    environment:
+      - SONAR_ES_BOOTSTRAP_CHECKS_DISABLE=true
+      - SONAR_JDBC_URL=jdbc:postgresql://sonarqube-db:5432/sonar
+      - SONAR_JDBC_USERNAME=sonar
+      - SONAR_JDBC_PASSWORD=sonar
+    volumes:
+      - sonarqube_data:/opt/sonarqube/data
+      - sonarqube_logs:/opt/sonarqube/logs
+      - sonarqube_extensions:/opt/sonarqube/extensions
+    networks:
+      - devops-network
+    depends_on:
+      - sonarqube-db
+
+  # ==========================================
+  # PostgreSQL Database for SonarQube
+  # ==========================================
+  sonarqube-db:
+    image: postgres:16-alpine
+    container_name: sonarqube-db
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=sonar
+      - POSTGRES_PASSWORD=sonar
+      - POSTGRES_DB=sonar
+    volumes:
+      - postgresql_data:/var/lib/postgresql/data
+    networks:
+      - devops-network
+
+volumes:
+  jenkins_home:
+    driver: local
+  sonarqube_data:
+    driver: local
+  sonarqube_logs:
+    driver: local
+  sonarqube_extensions:
+    driver: local
+  postgresql_data:
+    driver: local
+
+networks:
+  devops-network:
+    driver: bridge

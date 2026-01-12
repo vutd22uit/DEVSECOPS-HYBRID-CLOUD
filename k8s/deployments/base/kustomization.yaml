@@ -1,0 +1,42 @@
+# FoodHub Microservices - Kubernetes Base Manifests
+# Kustomize base configuration
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: foodhub
+
+resources:
+  - namespace.yaml
+  - serviceaccount.yaml
+  - users-deployment.yaml
+  - users-service.yaml
+  - products-deployment.yaml
+  - products-service.yaml
+  - orders-deployment.yaml
+  - orders-service.yaml
+  - frontend-deployment.yaml
+  - frontend-service.yaml
+  - ingress.yaml
+  - configmap.yaml
+  - secrets.yaml
+  - network-policy.yaml
+
+commonLabels:
+  app.kubernetes.io/managed-by: kustomize
+  project: foodhub
+  environment: production
+
+images:
+  - name: foodhub-users
+    newName: ghcr.io/vutd22uit/foodhub-users
+    newTag: latest
+  - name: foodhub-products
+    newName: ghcr.io/vutd22uit/foodhub-products
+    newTag: latest
+  - name: foodhub-orders
+    newName: ghcr.io/vutd22uit/foodhub-orders
+    newTag: latest
+  - name: foodhub-frontend
+    newName: ghcr.io/vutd22uit/foodhub-frontend
+    newTag: latest

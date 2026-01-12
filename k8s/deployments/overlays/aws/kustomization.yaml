@@ -1,0 +1,76 @@
+# AWS EKS Overlay for FoodHub
+# Uses AWS-specific configurations
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: foodhub
+
+resources:
+  - ../../base
+
+# AWS-specific patches
+patches:
+  # Update ingress for AWS ALB
+  - target:
+      kind: Ingress
+      name: foodhub-ingress
+    patch: |
+      - op: replace
+        path: /metadata/annotations
+        value:
+          kubernetes.io/ingress.class: alb
+          alb.ingress.kubernetes.io/scheme: internet-facing
+          alb.ingress.kubernetes.io/target-type: ip
+          alb.ingress.kubernetes.io/healthcheck-path: /actuator/health
+          alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
+          alb.ingress.kubernetes.io/ssl-redirect: "443"
+          alb.ingress.kubernetes.io/success-codes: "200-302"
+      - op: replace
+        path: /spec/ingressClassName
+        value: alb
+
+# AWS ECR images
+images:
+  - name: foodhub-users
+    newName: 257394468168.dkr.ecr.ap-southeast-1.amazonaws.com/foodhub-users
+    newTag: latest
+  - name: foodhub-products
+    newName: 257394468168.dkr.ecr.ap-southeast-1.amazonaws.com/foodhub-products
+    newTag: latest
+  - name: foodhub-orders
+    newName: 257394468168.dkr.ecr.ap-southeast-1.amazonaws.com/foodhub-orders
+    newTag: latest
+  - name: foodhub-frontend
+    newName: 257394468168.dkr.ecr.ap-southeast-1.amazonaws.com/foodhub-frontend
+    newTag: latest
+
+# AWS-specific labels
+commonLabels:
+  cloud: aws
+  cluster: foodhub-eks
+  region: ap-southeast-1
+
+# AWS ConfigMap overrides
+configMapGenerator:
+  - name: foodhub-config
+    behavior: merge
+    literals:
+      - api-base-url=https://api.foodhub.awscloud.com
+      - cloud-provider=aws
+      - cluster-name=foodhub-eks
+
+# AWS-specific secrets (RDS)
+secretGenerator:
+  - name: db-credentials
+    behavior: merge
+    literals:
+      - users-jdbc-url=jdbc:postgresql://foodhub-postgresql.xxx.ap-southeast-1.rds.amazonaws.com:5432/foodhub_users
+      - users-username=users_svc
+      - users-password=users_password_123
+      - products-jdbc-url=jdbc:postgresql://foodhub-postgresql.xxx.ap-southeast-1.rds.amazonaws.com:5432/foodhub_products
+      - products-username=products_svc
+      - products-password=products_password_123
+      - orders-jdbc-url=jdbc:postgresql://foodhub-postgresql.xxx.ap-southeast-1.rds.amazonaws.com:5432/foodhub_orders
+      - orders-username=orders_svc
+      - orders-password=orders_password_123

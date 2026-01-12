@@ -124,17 +124,31 @@ pipeline {
                         stage('Users: Build & Push') {
                             steps {
                                 script {
-                                    // Build and push to AWS ECR
+                                    def registries = []
                                     if (env.DEPLOYMENT_MODE == 'AWS' || env.DEPLOYMENT_MODE == 'HYBRID') {
-                                        echo "📦 Building and pushing to AWS ECR..."
-                                        sh "./scripts/docker-build-push.sh ${SERVICE_NAME} ${ECR_REGISTRY}/foodhub-${SERVICE_NAME} ${env.IMAGE_TAG}"
+                                        registries << "${ECR_REGISTRY}/foodhub-${SERVICE_NAME}"
                                     }
-
-                                    // Build and push to Harbor
                                     if (env.DEPLOYMENT_MODE == 'OPENSTACK' || env.DEPLOYMENT_MODE == 'HYBRID') {
-                                        echo "📦 Building and pushing to Harbor Registry..."
-                                        sh "./scripts/docker-build-push.sh ${SERVICE_NAME} ${HARBOR_REGISTRY}/${HARBOR_PROJECT}/foodhub-${SERVICE_NAME} ${env.IMAGE_TAG}"
+                                        registries << "${HARBOR_REGISTRY}/${HARBOR_PROJECT}/foodhub-${SERVICE_NAME}"
                                     }
+                                    
+                                    if (registries) {
+                                        echo "📦 Building and pushing to: ${registries.join(', ')}"
+                                        sh "./scripts/docker-build-push.sh ${SERVICE_NAME} ${env.IMAGE_TAG} ${registries.join(' ')}"
+                                    }
+                                }
+                            }
+                        }
+
+                        stage('Users: Image Scan') {
+                            steps {
+                                script {
+                                    def scanImage = (env.DEPLOYMENT_MODE == 'AWS' || env.DEPLOYMENT_MODE == 'HYBRID') ? 
+                                        "${ECR_REGISTRY}/foodhub-${SERVICE_NAME}:${env.IMAGE_TAG}" :
+                                        "${HARBOR_REGISTRY}/${HARBOR_PROJECT}/foodhub-${SERVICE_NAME}:${env.IMAGE_TAG}"
+                                    
+                                    echo "🛡️ Scanning Image: ${scanImage}"
+                                    sh "trivy image --cache-dir ${SCAN_CACHE_DIR} --severity ${TRIVY_SEVERITY} --exit-code 0 ${scanImage}"
                                 }
                             }
                         }
@@ -206,12 +220,27 @@ pipeline {
                         stage('Products: Build & Push') {
                             steps {
                                 script {
+                                    def registries = []
                                     if (env.DEPLOYMENT_MODE == 'AWS' || env.DEPLOYMENT_MODE == 'HYBRID') {
-                                        sh "./scripts/docker-build-push.sh ${SERVICE_NAME} ${ECR_REGISTRY}/foodhub-${SERVICE_NAME} ${env.IMAGE_TAG}"
+                                        registries << "${ECR_REGISTRY}/foodhub-${SERVICE_NAME}"
                                     }
                                     if (env.DEPLOYMENT_MODE == 'OPENSTACK' || env.DEPLOYMENT_MODE == 'HYBRID') {
-                                        sh "./scripts/docker-build-push.sh ${SERVICE_NAME} ${HARBOR_REGISTRY}/${HARBOR_PROJECT}/foodhub-${SERVICE_NAME} ${env.IMAGE_TAG}"
+                                        registries << "${HARBOR_REGISTRY}/${HARBOR_PROJECT}/foodhub-${SERVICE_NAME}"
                                     }
+                                    if (registries) {
+                                        sh "./scripts/docker-build-push.sh ${SERVICE_NAME} ${env.IMAGE_TAG} ${registries.join(' ')}"
+                                    }
+                                }
+                            }
+                        }
+
+                        stage('Products: Image Scan') {
+                            steps {
+                                script {
+                                    def scanImage = (env.DEPLOYMENT_MODE == 'AWS' || env.DEPLOYMENT_MODE == 'HYBRID') ? 
+                                        "${ECR_REGISTRY}/foodhub-${SERVICE_NAME}:${env.IMAGE_TAG}" :
+                                        "${HARBOR_REGISTRY}/${HARBOR_PROJECT}/foodhub-${SERVICE_NAME}:${env.IMAGE_TAG}"
+                                    sh "trivy image --cache-dir ${SCAN_CACHE_DIR} --severity ${TRIVY_SEVERITY} --exit-code 0 ${scanImage}"
                                 }
                             }
                         }
@@ -283,12 +312,27 @@ pipeline {
                         stage('Orders: Build & Push') {
                             steps {
                                 script {
+                                    def registries = []
                                     if (env.DEPLOYMENT_MODE == 'AWS' || env.DEPLOYMENT_MODE == 'HYBRID') {
-                                        sh "./scripts/docker-build-push.sh ${SERVICE_NAME} ${ECR_REGISTRY}/foodhub-${SERVICE_NAME} ${env.IMAGE_TAG}"
+                                        registries << "${ECR_REGISTRY}/foodhub-${SERVICE_NAME}"
                                     }
                                     if (env.DEPLOYMENT_MODE == 'OPENSTACK' || env.DEPLOYMENT_MODE == 'HYBRID') {
-                                        sh "./scripts/docker-build-push.sh ${SERVICE_NAME} ${HARBOR_REGISTRY}/${HARBOR_PROJECT}/foodhub-${SERVICE_NAME} ${env.IMAGE_TAG}"
+                                        registries << "${HARBOR_REGISTRY}/${HARBOR_PROJECT}/foodhub-${SERVICE_NAME}"
                                     }
+                                    if (registries) {
+                                        sh "./scripts/docker-build-push.sh ${SERVICE_NAME} ${env.IMAGE_TAG} ${registries.join(' ')}"
+                                    }
+                                }
+                            }
+                        }
+
+                        stage('Orders: Image Scan') {
+                            steps {
+                                script {
+                                    def scanImage = (env.DEPLOYMENT_MODE == 'AWS' || env.DEPLOYMENT_MODE == 'HYBRID') ? 
+                                        "${ECR_REGISTRY}/foodhub-${SERVICE_NAME}:${env.IMAGE_TAG}" :
+                                        "${HARBOR_REGISTRY}/${HARBOR_PROJECT}/foodhub-${SERVICE_NAME}:${env.IMAGE_TAG}"
+                                    sh "trivy image --cache-dir ${SCAN_CACHE_DIR} --severity ${TRIVY_SEVERITY} --exit-code 0 ${scanImage}"
                                 }
                             }
                         }
@@ -360,12 +404,27 @@ pipeline {
                         stage('Frontend: Build & Push') {
                             steps {
                                 script {
+                                    def registries = []
                                     if (env.DEPLOYMENT_MODE == 'AWS' || env.DEPLOYMENT_MODE == 'HYBRID') {
-                                        sh "./scripts/docker-build-push.sh ${SERVICE_NAME} ${ECR_REGISTRY}/foodhub-${SERVICE_NAME} ${env.IMAGE_TAG}"
+                                        registries << "${ECR_REGISTRY}/foodhub-${SERVICE_NAME}"
                                     }
                                     if (env.DEPLOYMENT_MODE == 'OPENSTACK' || env.DEPLOYMENT_MODE == 'HYBRID') {
-                                        sh "./scripts/docker-build-push.sh ${SERVICE_NAME} ${HARBOR_REGISTRY}/${HARBOR_PROJECT}/foodhub-${SERVICE_NAME} ${env.IMAGE_TAG}"
+                                        registries << "${HARBOR_REGISTRY}/${HARBOR_PROJECT}/foodhub-${SERVICE_NAME}"
                                     }
+                                    if (registries) {
+                                        sh "./scripts/docker-build-push.sh ${SERVICE_NAME} ${env.IMAGE_TAG} ${registries.join(' ')}"
+                                    }
+                                }
+                            }
+                        }
+
+                        stage('Frontend: Image Scan') {
+                            steps {
+                                script {
+                                    def scanImage = (env.DEPLOYMENT_MODE == 'AWS' || env.DEPLOYMENT_MODE == 'HYBRID') ? 
+                                        "${ECR_REGISTRY}/foodhub-${SERVICE_NAME}:${env.IMAGE_TAG}" :
+                                        "${HARBOR_REGISTRY}/${HARBOR_PROJECT}/foodhub-${SERVICE_NAME}:${env.IMAGE_TAG}"
+                                    sh "trivy image --cache-dir ${SCAN_CACHE_DIR} --severity ${TRIVY_SEVERITY} --exit-code 0 ${scanImage}"
                                 }
                             }
                         }
@@ -405,20 +464,25 @@ pipeline {
             when { branch 'main' }
             steps {
                 script {
-                    echo """
-                    ═══════════════════════════════════════════════════════════════
-                    🏥 HEALTH CHECK - HYBRID CLOUD
-                    ═══════════════════════════════════════════════════════════════
-                    """
+                    echo "🏥 Starting Health Checks for Microservices..."
+
+                    def checkService = { context, cloudName ->
+                        echo "🔍 Checking status on ${cloudName}..."
+                        sh "kubectl --context ${context} get pods -n foodhub"
+                        sh """
+                            for service in users products orders frontend; do
+                                echo "Checking status of \$service..."
+                                kubectl --context ${context} rollout status deployment/\$service -n foodhub --timeout=60s
+                            done
+                        """
+                    }
 
                     if (env.DEPLOYMENT_MODE == 'AWS' || env.DEPLOYMENT_MODE == 'HYBRID') {
-                        echo "✅ Checking AWS EKS deployment status..."
-                        // Add AWS health check logic here
+                        checkService(env.EKS_CONTEXT, "AWS EKS")
                     }
 
                     if (env.DEPLOYMENT_MODE == 'OPENSTACK' || env.DEPLOYMENT_MODE == 'HYBRID') {
-                        echo "✅ Checking OpenStack K8s deployment status..."
-                        // Add OpenStack health check logic here
+                        checkService(env.OPENSTACK_K8S_CONTEXT, "OpenStack K8s")
                     }
                 }
             }
@@ -457,10 +521,8 @@ pipeline {
 // ==========================================
 
 def updateGitOps(String serviceName, String imageTag, String cloudProvider) {
-    def gitOpsDir = "gitops-config"
-    def valuesFile = cloudProvider == 'aws' ?
-        "services/${serviceName}/aws/values.yaml" :
-        "services/${serviceName}/openstack/values.yaml"
+    def gitOpsDir = "gitops-config-${cloudProvider}-${serviceName}"
+    def valuesFile = "services/${serviceName}/${cloudProvider}/values.yaml"
 
     echo "📝 Updating GitOps for ${serviceName} in ${cloudProvider}..."
 
@@ -470,17 +532,23 @@ def updateGitOps(String serviceName, String imageTag, String cloudProvider) {
             git clone https://${GIT_TOKEN}@${env.GITOPS_REPO_URL} ${gitOpsDir}
             cd ${gitOpsDir}
 
-            # Update image tag in values.yaml
             if [ -f "${valuesFile}" ]; then
+                # Use a more reliable sed command
                 sed -i "s|tag:.*|tag: ${imageTag}|" ${valuesFile}
 
                 git config user.name "Jenkins CI"
                 git config user.email "jenkins@foodhub.local"
                 git add ${valuesFile}
-                git commit -m "Update ${serviceName} image to ${imageTag} for ${cloudProvider}" || true
-                git push origin main
+                
+                if ! git diff-index --quiet HEAD; then
+                    git commit -m "Update ${serviceName} image to ${imageTag} for ${cloudProvider}"
+                    git push origin main
+                else
+                    echo "No changes to commit for ${serviceName} in ${cloudProvider}"
+                fi
             else
-                echo "Warning: ${valuesFile} not found"
+                echo "Warning: ${valuesFile} not found in GitOps repo"
+                ls -R
             fi
         """
     }

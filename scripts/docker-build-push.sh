@@ -2,18 +2,24 @@
 set -e
 
 SERVICE_NAME=$1
-IMAGE_URI=$2
-IMAGE_TAG=$3
+IMAGE_TAG=$2
+shift 2
+REGISTRIES=("$@")
 
 echo "--> [DOCKER] Building $SERVICE_NAME..."
 
 cd "services/$SERVICE_NAME"
 
-# Build (gắn 2 tag: commit-hash và latest)
-docker build -t "$IMAGE_URI:$IMAGE_TAG" -t "$IMAGE_URI:latest" .
+# Build local image first
+LOCAL_IMAGE="foodhub-$SERVICE_NAME:latest"
+docker build -t "$LOCAL_IMAGE" .
 
-echo "--> [DOCKER] Pushing to ECR..."
-docker push "$IMAGE_URI:$IMAGE_TAG"
-docker push "$IMAGE_URI:latest"
+for URI in "${REGISTRIES[@]}"; do
+    echo "--> [DOCKER] Tagging and Pushing to: $URI"
+    docker tag "$LOCAL_IMAGE" "$URI:$IMAGE_TAG"
+    docker tag "$LOCAL_IMAGE" "$URI:latest"
+    docker push "$URI:$IMAGE_TAG"
+    docker push "$URI:latest"
+done
 
-echo "--> [DOCKER] Thành công! Image: $IMAGE_URI:$IMAGE_TAG"
+echo "--> [DOCKER] Thành công! Dịch vụ $SERVICE_NAME đã được đẩy lên ${#REGISTRIES[@]} registries."

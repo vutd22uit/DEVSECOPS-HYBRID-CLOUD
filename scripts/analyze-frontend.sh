@@ -3,7 +3,8 @@ set -e
 
 echo "--> [FRONTEND] Setup môi trường..."
 # Cài JRE cho Sonar (bắt buộc vì scanner chạy bằng Java)
-apt-get update -qq && apt-get install -y default-jre > /dev/null
+# Sử dụng apk cho Alpine image
+apk update && apk add --no-cache default-jre
 
 cd services/frontend
 

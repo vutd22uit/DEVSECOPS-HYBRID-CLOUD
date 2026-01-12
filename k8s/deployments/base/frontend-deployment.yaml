@@ -1,0 +1,103 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: foodhub-frontend
+  labels:
+    app: foodhub-frontend
+    version: v1
+    tier: frontend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: foodhub-frontend
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: foodhub-frontend
+        version: v1
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "3000"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: foodhub-sa
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: frontend
+          image: foodhub-frontend
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          env:
+            - name: NODE_ENV
+              value: "production"
+            - name: NEXT_PUBLIC_API_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: foodhub-config
+                  key: api-base-url
+            - name: NEXT_PUBLIC_USERS_SERVICE_URL
+              value: "http://foodhub-users:8082"
+            - name: NEXT_PUBLIC_PRODUCTS_SERVICE_URL
+              value: "http://foodhub-products:8083"
+            - name: NEXT_PUBLIC_ORDERS_SERVICE_URL
+              value: "http://foodhub-orders:8084"
+            - name: NEXT_PUBLIC_CLOUD_PROVIDER
+              valueFrom:
+                configMapKeyRef:
+                  name: foodhub-config
+                  key: cloud-provider
+            - name: NEXT_PUBLIC_CLUSTER_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: foodhub-config
+                  key: cluster-name
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+                - ALL
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: foodhub-frontend
+                topologyKey: kubernetes.io/hostname

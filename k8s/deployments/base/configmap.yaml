@@ -1,0 +1,28 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: foodhub-config
+  labels:
+    app: foodhub
+data:
+  # Application settings
+  api-base-url: "http://api.foodhub.local"
+  
+  # Logging
+  log-level: "INFO"
+  
+  # Feature flags
+  feature-order-notifications: "true"
+  feature-product-recommendations: "true"
+  
+  # Service discovery
+  users-service-host: "foodhub-users"
+  products-service-host: "foodhub-products"
+  orders-service-host: "foodhub-orders"
+  
+  # Spring Boot common settings
+  spring-jpa-show-sql: "false"
+  spring-jpa-ddl-auto: "validate"
+  
+  # Actuator endpoints
+  management-endpoints: "health,info,prometheus,metrics"

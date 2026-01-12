@@ -1,0 +1,94 @@
+# OpenStack Kubernetes Overlay for FoodHub
+# Uses OpenStack-specific configurations
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: foodhub
+
+resources:
+  - ../../base
+
+# OpenStack-specific patches
+patches:
+  # Use NGINX Ingress Controller
+  - target:
+      kind: Ingress
+      name: foodhub-ingress
+    patch: |
+      - op: replace
+        path: /metadata/annotations
+        value:
+          nginx.ingress.kubernetes.io/rewrite-target: /
+          nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+          nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+          nginx.ingress.kubernetes.io/enable-cors: "true"
+          nginx.ingress.kubernetes.io/ssl-redirect: "false"
+      - op: replace
+        path: /spec/ingressClassName
+        value: nginx
+  
+  # Adjust resources for OpenStack (smaller VMs)
+  - target:
+      kind: Deployment
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 1
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/cpu
+        value: "50m"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/memory
+        value: "128Mi"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/cpu
+        value: "250m"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/memory
+        value: "384Mi"
+
+# Harbor Registry images
+images:
+  - name: foodhub-users
+    newName: harbor.foodhub.local/foodhub/foodhub-users
+    newTag: latest
+  - name: foodhub-products
+    newName: harbor.foodhub.local/foodhub/foodhub-products
+    newTag: latest
+  - name: foodhub-orders
+    newName: harbor.foodhub.local/foodhub/foodhub-orders
+    newTag: latest
+  - name: foodhub-frontend
+    newName: harbor.foodhub.local/foodhub/foodhub-frontend
+    newTag: latest
+
+# OpenStack-specific labels
+commonLabels:
+  cloud: openstack
+  cluster: foodhub-openstack
+  region: regionone
+
+# OpenStack ConfigMap overrides
+configMapGenerator:
+  - name: foodhub-config
+    behavior: merge
+    literals:
+      - api-base-url=http://api.foodhub.openstack.local
+      - cloud-provider=openstack
+      - cluster-name=foodhub-openstack
+
+# OpenStack-specific secrets (Self-hosted PostgreSQL)
+secretGenerator:
+  - name: db-credentials
+    behavior: merge
+    literals:
+      - users-jdbc-url=jdbc:postgresql://postgresql.foodhub.local:5432/foodhub_users
+      - users-username=foodhub_user
+      - users-password=foodhub_password_change_me
+      - products-jdbc-url=jdbc:postgresql://postgresql.foodhub.local:5432/foodhub_products
+      - products-username=foodhub_user
+      - products-password=foodhub_password_change_me
+      - orders-jdbc-url=jdbc:postgresql://postgresql.foodhub.local:5432/foodhub_orders
+      - orders-username=foodhub_user
+      - orders-password=foodhub_password_change_me

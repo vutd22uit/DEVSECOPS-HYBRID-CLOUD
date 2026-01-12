@@ -1,0 +1,40 @@
+# Jenkins Core Plugins
+workflow-aggregator:latest
+git:latest
+github:latest
+github-branch-source:latest
+pipeline-stage-view:latest
+docker-workflow:latest
+docker-plugin:latest
+kubernetes:latest
+kubernetes-cli:latest
+
+# Security & Credentials
+credentials:latest
+credentials-binding:latest
+plain-credentials:latest
+ssh-credentials:latest
+aws-credentials:latest
+
+# Code Quality & Analysis
+sonar:latest
+warnings-ng:latest
+
+# Notifications & Reporting
+email-ext:latest
+slack:latest
+ansicolor:latest
+
+# Build & Deployment
+pipeline-utility-steps:latest
+timestamper:latest
+build-timeout:latest
+ws-cleanup:latest
+
+# Source Control
+git-parameter:latest
+pipeline-github-lib:latest
+
+# Configuration as Code
+configuration-as-code:latest
+job-dsl:latest

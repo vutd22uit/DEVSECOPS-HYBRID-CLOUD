@@ -1,0 +1,439 @@
+pipeline {
+    agent any
+
+    options {
+        buildDiscarder(logRotator(numToKeepStr: '10'))
+        disableConcurrentBuilds()
+        timeout(time: 60, unit: 'MINUTES')
+        timestamps()
+        ansiColor('xterm')
+    }
+
+    environment {
+        // --- DEPLOYMENT MODE ---
+        // Options: GHCR, OPENSTACK, AWS
+        DEPLOYMENT_MODE = 'GHCR' // Default: Push to GitHub Container Registry only
+
+        // --- GITHUB CONTAINER REGISTRY ---
+        GHCR_REGISTRY    = 'ghcr.io'
+        GHCR_NAMESPACE   = 'vutd22uit'
+        GHCR_CREDS       = credentials('github-pat')
+
+        // --- OPTIONAL: AWS Configuration (if DEPLOYMENT_MODE = AWS) ---
+        AWS_REGION       = 'ap-southeast-1'
+        AWS_ACCOUNT_ID   = '257394468168'
+        ECR_REGISTRY     = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+
+        // --- OPTIONAL: OpenStack/Harbor Configuration ---
+        HARBOR_REGISTRY  = credentials('harbor-registry-url')
+        HARBOR_PROJECT   = 'foodhub'
+        HARBOR_CREDS     = credentials('harbor-credentials')
+
+        // --- SECURITY & CACHE ---
+        TRIVY_SEVERITY   = 'HIGH,CRITICAL'
+        SCAN_CACHE_DIR   = '/var/lib/jenkins/.trivy-cache'
+
+        // --- GITOPS ---
+        GITOPS_REPO_URL  = 'github.com/vutd22uit/foodhub-gitops.git'
+        GITOPS_CRED_ID   = 'github-pat'
+
+        // --- SONARQUBE ---
+        SONAR_AUTH_TOKEN = credentials('sonar-token')
+        SONAR_HOST_URL   = 'http://localhost:9000'
+    }
+
+    stages {
+        stage('1. Initialize') {
+            steps {
+                script {
+                    sh 'chmod +x scripts/*.sh'
+                    sh "mkdir -p ${SCAN_CACHE_DIR}"
+                    sh 'mkdir -p /var/lib/jenkins/.m2/repository'
+                    sh 'mkdir -p /var/lib/jenkins/.npm'
+
+                    env.COMMIT_HASH = sh(script: 'git rev-parse --short=7 HEAD', returnStdout: true).trim()
+                    if (env.BRANCH_NAME == 'main') {
+                        env.IMAGE_TAG = env.COMMIT_HASH
+                    } else {
+                        env.IMAGE_TAG = "${env.BRANCH_NAME}-${env.COMMIT_HASH}"
+                    }
+
+                    echo """
+                    ═══════════════════════════════════════════════════════════════
+                    🚀 CI/CD PIPELINE (No Terraform!)
+                    ═══════════════════════════════════════════════════════════════
+                    Branch:      ${env.BRANCH_NAME}
+                    Commit:      ${env.COMMIT_HASH}
+                    Image Tag:   ${env.IMAGE_TAG}
+                    Mode:        ${DEPLOYMENT_MODE}
+                    Registry:    ${getRegistryUrl()}
+                    ═══════════════════════════════════════════════════════════════
+                    """
+                }
+
+                // Login to selected registry
+                script {
+                    if (env.DEPLOYMENT_MODE == 'GHCR') {
+                        sh "echo ${GHCR_CREDS_PSW} | docker login ${GHCR_REGISTRY} -u ${GHCR_CREDS_USR} --password-stdin"
+                    } else if (env.DEPLOYMENT_MODE == 'AWS') {
+                        sh "aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REGISTRY}"
+                    } else if (env.DEPLOYMENT_MODE == 'OPENSTACK') {
+                        sh "echo ${HARBOR_CREDS_PSW} | docker login ${HARBOR_REGISTRY} -u ${HARBOR_CREDS_USR} --password-stdin"
+                    }
+                }
+            }
+        }
+
+        stage('2. Build & Deploy Services') {
+            parallel {
+                // ==========================================
+                // USERS SERVICE
+                // ==========================================
+                stage('Users Service') {
+                    when {
+                        anyOf {
+                            triggeredBy 'UserIdCause'
+                            expression { return currentBuild.previousBuild == null }
+                            changeset "services/users/**"
+                        }
+                    }
+                    stages {
+                        stage('Users: Code Analysis') {
+                            agent {
+                                docker {
+                                    image 'maven:3.9-eclipse-temurin-21'
+                                    args '--network host -v /var/lib/jenkins/.m2:/root/.m2 -u 0:0'
+                                    reuseNode true
+                                }
+                            }
+                            steps {
+                                withSonarQubeEnv('sonarqube-local') {
+                                    sh './scripts/analyze-backend.sh users'
+                                }
+                            }
+                            post { always { sh 'rm -rf services/users/target' } }
+                        }
+
+                        stage('Users: Security Scan') {
+                            steps {
+                                sh "./scripts/security-scan.sh users ${SCAN_CACHE_DIR} ${TRIVY_SEVERITY}"
+                            }
+                        }
+
+                        stage('Users: Build & Push') {
+                            steps {
+                                script {
+                                    def imageName = getFullImageName('users')
+                                    sh """
+                                        cd services/users
+                                        docker build -t ${imageName}:${env.IMAGE_TAG} .
+                                        docker push ${imageName}:${env.IMAGE_TAG}
+                                        docker tag ${imageName}:${env.IMAGE_TAG} ${imageName}:latest
+                                        docker push ${imageName}:latest
+                                    """
+                                }
+                            }
+                        }
+
+                        stage('Users: Update GitOps') {
+                            when { branch 'main' }
+                            steps {
+                                updateGitOps('users', env.IMAGE_TAG)
+                            }
+                        }
+                    }
+                }
+
+                // ==========================================
+                // PRODUCTS SERVICE
+                // ==========================================
+                stage('Products Service') {
+                    when {
+                        anyOf {
+                            triggeredBy 'UserIdCause'
+                            expression { return currentBuild.previousBuild == null }
+                            changeset "services/products/**"
+                        }
+                    }
+                    stages {
+                        stage('Products: Code Analysis') {
+                            agent {
+                                docker {
+                                    image 'maven:3.9-eclipse-temurin-21'
+                                    args '--network host -v /var/lib/jenkins/.m2:/root/.m2 -u 0:0'
+                                    reuseNode true
+                                }
+                            }
+                            steps {
+                                withSonarQubeEnv('sonarqube-local') {
+                                    sh './scripts/analyze-backend.sh products'
+                                }
+                            }
+                            post { always { sh 'rm -rf services/products/target' } }
+                        }
+
+                        stage('Products: Security Scan') {
+                            steps {
+                                sh "./scripts/security-scan.sh products ${SCAN_CACHE_DIR} ${TRIVY_SEVERITY}"
+                            }
+                        }
+
+                        stage('Products: Build & Push') {
+                            steps {
+                                script {
+                                    def imageName = getFullImageName('products')
+                                    sh """
+                                        cd services/products
+                                        docker build -t ${imageName}:${env.IMAGE_TAG} .
+                                        docker push ${imageName}:${env.IMAGE_TAG}
+                                        docker tag ${imageName}:${env.IMAGE_TAG} ${imageName}:latest
+                                        docker push ${imageName}:latest
+                                    """
+                                }
+                            }
+                        }
+
+                        stage('Products: Update GitOps') {
+                            when { branch 'main' }
+                            steps {
+                                updateGitOps('products', env.IMAGE_TAG)
+                            }
+                        }
+                    }
+                }
+
+                // ==========================================
+                // ORDERS SERVICE
+                // ==========================================
+                stage('Orders Service') {
+                    when {
+                        anyOf {
+                            triggeredBy 'UserIdCause'
+                            expression { return currentBuild.previousBuild == null }
+                            changeset "services/orders/**"
+                        }
+                    }
+                    stages {
+                        stage('Orders: Code Analysis') {
+                            agent {
+                                docker {
+                                    image 'maven:3.9-eclipse-temurin-21'
+                                    args '--network host -v /var/lib/jenkins/.m2:/root/.m2 -u 0:0'
+                                    reuseNode true
+                                }
+                            }
+                            steps {
+                                withSonarQubeEnv('sonarqube-local') {
+                                    sh './scripts/analyze-backend.sh orders'
+                                }
+                            }
+                            post { always { sh 'rm -rf services/orders/target' } }
+                        }
+
+                        stage('Orders: Security Scan') {
+                            steps {
+                                sh "./scripts/security-scan.sh orders ${SCAN_CACHE_DIR} ${TRIVY_SEVERITY}"
+                            }
+                        }
+
+                        stage('Orders: Build & Push') {
+                            steps {
+                                script {
+                                    def imageName = getFullImageName('orders')
+                                    sh """
+                                        cd services/orders
+                                        docker build -t ${imageName}:${env.IMAGE_TAG} .
+                                        docker push ${imageName}:${env.IMAGE_TAG}
+                                        docker tag ${imageName}:${env.IMAGE_TAG} ${imageName}:latest
+                                        docker push ${imageName}:latest
+                                    """
+                                }
+                            }
+                        }
+
+                        stage('Orders: Update GitOps') {
+                            when { branch 'main' }
+                            steps {
+                                updateGitOps('orders', env.IMAGE_TAG)
+                            }
+                        }
+                    }
+                }
+
+                // ==========================================
+                // FRONTEND SERVICE
+                // ==========================================
+                stage('Frontend Service') {
+                    when {
+                        anyOf {
+                            triggeredBy 'UserIdCause'
+                            expression { return currentBuild.previousBuild == null }
+                            changeset "services/frontend/**"
+                        }
+                    }
+                    stages {
+                        stage('Frontend: Code Analysis') {
+                            agent {
+                                docker {
+                                    image 'node:20-alpine'
+                                    args '--network host -v /var/lib/jenkins/.npm:/root/.npm -u 0:0'
+                                    reuseNode true
+                                }
+                            }
+                            steps {
+                                withSonarQubeEnv('sonarqube-local') {
+                                    sh './scripts/analyze-frontend.sh frontend'
+                                }
+                            }
+                            post { always { sh 'rm -rf services/frontend/node_modules services/frontend/.next' } }
+                        }
+
+                        stage('Frontend: Security Scan') {
+                            steps {
+                                sh "./scripts/security-scan.sh frontend ${SCAN_CACHE_DIR} ${TRIVY_SEVERITY}"
+                            }
+                        }
+
+                        stage('Frontend: Build & Push') {
+                            steps {
+                                script {
+                                    def imageName = getFullImageName('frontend')
+                                    sh """
+                                        cd services/frontend
+                                        docker build -t ${imageName}:${env.IMAGE_TAG} .
+                                        docker push ${imageName}:${env.IMAGE_TAG}
+                                        docker tag ${imageName}:${env.IMAGE_TAG} ${imageName}:latest
+                                        docker push ${imageName}:latest
+                                    """
+                                }
+                            }
+                        }
+
+                        stage('Frontend: Update GitOps') {
+                            when { branch 'main' }
+                            steps {
+                                updateGitOps('frontend', env.IMAGE_TAG)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('3. Notify Deployment') {
+            when { branch 'main' }
+            steps {
+                script {
+                    echo """
+                    ═══════════════════════════════════════════════════════════════
+                    📢 DEPLOYMENT NOTIFICATION
+                    ═══════════════════════════════════════════════════════════════
+                    Images pushed to: ${getRegistryUrl()}
+                    Image Tag: ${env.IMAGE_TAG}
+                    
+                    ArgoCD will automatically sync the changes.
+                    
+                    Manual deployment (if needed):
+                    kubectl apply -k k8s/deployments/overlays/${getOverlayName()}/
+                    ═══════════════════════════════════════════════════════════════
+                    """
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo """
+            ═══════════════════════════════════════════════════════════════
+            ✅ CI/CD PIPELINE SUCCESSFUL (No Terraform!)
+            ═══════════════════════════════════════════════════════════════
+            Branch:      ${env.BRANCH_NAME}
+            Commit:      ${env.COMMIT_HASH}
+            Image Tag:   ${env.IMAGE_TAG}
+            Registry:    ${getRegistryUrl()}
+            ═══════════════════════════════════════════════════════════════
+            """
+        }
+        failure {
+            echo """
+            ═══════════════════════════════════════════════════════════════
+            ❌ CI/CD PIPELINE FAILED
+            ═══════════════════════════════════════════════════════════════
+            Branch:      ${env.BRANCH_NAME}
+            Commit:      ${env.COMMIT_HASH}
+            Check logs for details
+            ═══════════════════════════════════════════════════════════════
+            """
+        }
+        always {
+            cleanWs()
+        }
+    }
+}
+
+// ==========================================
+// HELPER FUNCTIONS
+// ==========================================
+
+def getRegistryUrl() {
+    switch(env.DEPLOYMENT_MODE) {
+        case 'GHCR':
+            return "${GHCR_REGISTRY}/${GHCR_NAMESPACE}"
+        case 'AWS':
+            return env.ECR_REGISTRY
+        case 'OPENSTACK':
+            return "${HARBOR_REGISTRY}/${HARBOR_PROJECT}"
+        default:
+            return "${GHCR_REGISTRY}/${GHCR_NAMESPACE}"
+    }
+}
+
+def getFullImageName(String service) {
+    switch(env.DEPLOYMENT_MODE) {
+        case 'GHCR':
+            return "${GHCR_REGISTRY}/${GHCR_NAMESPACE}/foodhub-${service}"
+        case 'AWS':
+            return "${ECR_REGISTRY}/foodhub-${service}"
+        case 'OPENSTACK':
+            return "${HARBOR_REGISTRY}/${HARBOR_PROJECT}/foodhub-${service}"
+        default:
+            return "${GHCR_REGISTRY}/${GHCR_NAMESPACE}/foodhub-${service}"
+    }
+}
+
+def getOverlayName() {
+    switch(env.DEPLOYMENT_MODE) {
+        case 'AWS':
+            return 'aws'
+        case 'OPENSTACK':
+            return 'openstack'
+        default:
+            return 'openstack' // Default to OpenStack for GHCR mode
+    }
+}
+
+def updateGitOps(String serviceName, String imageTag) {
+    def gitOpsDir = 'gitops-config'
+    
+    echo "📝 Updating GitOps for ${serviceName}..."
+    
+    withCredentials([string(credentialsId: env.GITOPS_CRED_ID, variable: 'GIT_TOKEN')]) {
+        sh """
+            rm -rf ${gitOpsDir}
+            git clone https://${GIT_TOKEN}@${env.GITOPS_REPO_URL} ${gitOpsDir}
+            cd ${gitOpsDir}
+            
+            # Update kustomization.yaml with new image tag
+            if [ -f "services/${serviceName}/kustomization.yaml" ]; then
+                sed -i 's/newTag:.*/newTag: ${imageTag}/' services/${serviceName}/kustomization.yaml
+                
+                git config user.name "Jenkins CI"
+                git config user.email "jenkins@foodhub.local"
+                git add .
+                git commit -m "Update ${serviceName} to ${imageTag}" || true
+                git push origin main
+            fi
+        """
+    }
+}

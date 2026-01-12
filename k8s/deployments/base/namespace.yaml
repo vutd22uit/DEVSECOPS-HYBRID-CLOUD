@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: foodhub
+  labels:
+    name: foodhub
+    istio-injection: disabled
+  annotations:
+    description: "FoodHub microservices namespace"
