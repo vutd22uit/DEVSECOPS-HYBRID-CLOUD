@@ -1,0 +1,136 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: foodhub-microservices-hybrid
+  namespace: argocd
+spec:
+  generators:
+    # Matrix generator: Combine services with clusters
+    - matrix:
+        generators:
+          # List of microservices
+          - list:
+              elements:
+                - service: users
+                  port: 8081
+                - service: products
+                  port: 8082
+                - service: orders
+                  port: 8083
+                - service: frontend
+                  port: 3000
+
+          # List of clusters
+          - list:
+              elements:
+                - cluster: foodhub-eks
+                  clusterName: foodhub-eks
+                  server: https://REPLACE_WITH_EKS_API_ENDPOINT
+                  cloud: aws
+                  registry: 257394468168.dkr.ecr.ap-southeast-1.amazonaws.com
+
+                - cluster: foodhub-openstack
+                  clusterName: foodhub-openstack
+                  server: https://REPLACE_WITH_OPENSTACK_K8S_API_ENDPOINT:6443
+                  cloud: openstack
+                  registry: REPLACE_WITH_HARBOR_REGISTRY
+
+  template:
+    metadata:
+      name: '{{service}}-{{cloud}}'
+      labels:
+        service: '{{service}}'
+        cloud: '{{cloud}}'
+        cluster: '{{clusterName}}'
+      annotations:
+        notifications.argoproj.io/subscribe.on-sync-succeeded.slack: foodhub-deployments
+    spec:
+      project: foodhub
+
+      source:
+        repoURL: https://github.com/NgHVu/dacn-config.git
+        targetRevision: main
+        path: 'services/{{service}}/{{cloud}}'
+        helm:
+          valueFiles:
+            - values.yaml
+          parameters:
+            - name: image.registry
+              value: '{{registry}}'
+            - name: image.repository
+              value: 'foodhub-{{service}}'
+            - name: service.port
+              value: '{{port}}'
+
+      destination:
+        server: '{{server}}'
+        namespace: foodhub
+
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+          allowEmpty: false
+        syncOptions:
+          - CreateNamespace=true
+          - PrunePropagationPolicy=foreground
+          - PruneLast=true
+        retry:
+          limit: 5
+          backoff:
+            duration: 5s
+            factor: 2
+            maxDuration: 3m
+
+      # Health assessment
+      ignoreDifferences:
+        - group: apps
+          kind: Deployment
+          jsonPointers:
+            - /spec/replicas
+
+      # Notification on deployment
+      revisionHistoryLimit: 10
+---
+# ArgoCD Project for FoodHub
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: foodhub
+  namespace: argocd
+spec:
+  description: FoodHub Microservices - Hybrid Cloud Deployment
+
+  # Source repositories
+  sourceRepos:
+    - 'https://github.com/NgHVu/dacn-config.git'
+    - '*'
+
+  # Destination clusters and namespaces
+  destinations:
+    - namespace: 'foodhub'
+      server: '*'
+    - namespace: 'foodhub-*'
+      server: '*'
+
+  # Allowed resource types
+  clusterResourceWhitelist:
+    - group: '*'
+      kind: '*'
+
+  namespaceResourceWhitelist:
+    - group: '*'
+      kind: '*'
+
+  # Sync windows
+  syncWindows:
+    - kind: allow
+      schedule: '* * * * *'
+      duration: 24h
+      applications:
+        - '*'
+      manualSync: true
+
+  # Orphaned resources monitoring
+  orphanedResources:
+    warn: true

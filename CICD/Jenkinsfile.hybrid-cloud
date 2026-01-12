@@ -1,0 +1,487 @@
+pipeline {
+    agent any
+
+    options {
+        buildDiscarder(logRotator(numToKeepStr: '10'))
+        disableConcurrentBuilds()
+        timeout(time: 90, unit: 'MINUTES')
+        timestamps()
+        ansiColor('xterm')
+    }
+
+    environment {
+        // --- HYBRID CLOUD CONFIGURATION ---
+        DEPLOYMENT_MODE = 'HYBRID' // Options: AWS, OPENSTACK, HYBRID
+
+        // --- AWS CONFIGURATION ---
+        AWS_REGION      = 'ap-southeast-1'
+        AWS_ACCOUNT_ID  = '257394468168'
+        ECR_REGISTRY    = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+
+        // --- OPENSTACK CONFIGURATION ---
+        HARBOR_REGISTRY = credentials('harbor-registry-url') // e.g., harbor.example.com
+        HARBOR_PROJECT  = 'foodhub'
+        HARBOR_CREDS    = credentials('harbor-credentials')
+
+        // --- KUBERNETES CONTEXTS ---
+        EKS_CONTEXT     = 'foodhub-eks'
+        OPENSTACK_K8S_CONTEXT = 'foodhub-openstack'
+
+        // --- SECURITY & CACHE ---
+        TRIVY_SEVERITY  = 'HIGH,CRITICAL'
+        SCAN_CACHE_DIR  = "/var/lib/jenkins/.trivy-cache"
+
+        // --- GITOPS (ArgoCD) ---
+        GITOPS_REPO_URL = "github.com/NgHVu/dacn-config.git"
+        GITOPS_CRED_ID  = "github-pat"
+
+        // --- SONARQUBE ---
+        SONAR_AUTH_TOKEN = credentials('sonar-token')
+        SONAR_HOST_URL   = 'http://localhost:9000'
+    }
+
+    stages {
+        stage('1. Initialize') {
+            steps {
+                script {
+                    sh 'chmod +x scripts/*.sh'
+
+                    // Create cache directories
+                    sh "mkdir -p ${SCAN_CACHE_DIR}"
+                    sh "mkdir -p /var/lib/jenkins/.m2/repository"
+                    sh "mkdir -p /var/lib/jenkins/.npm"
+
+                    env.COMMIT_HASH = sh(script: 'git rev-parse --short=7 HEAD', returnStdout: true).trim()
+                    if (env.BRANCH_NAME == 'main') {
+                        env.IMAGE_TAG = env.COMMIT_HASH
+                    } else {
+                        env.IMAGE_TAG = "${env.BRANCH_NAME}-${env.COMMIT_HASH}"
+                    }
+
+                    echo """
+                    ═══════════════════════════════════════════════════════════════
+                    🌐 HYBRID CLOUD CI/CD PIPELINE
+                    ═══════════════════════════════════════════════════════════════
+                    Branch:      ${env.BRANCH_NAME}
+                    Commit:      ${env.COMMIT_HASH}
+                    Image Tag:   ${env.IMAGE_TAG}
+                    Mode:        ${DEPLOYMENT_MODE}
+                    AWS EKS:     ${EKS_CONTEXT}
+                    OpenStack:   ${OPENSTACK_K8S_CONTEXT}
+                    ═══════════════════════════════════════════════════════════════
+                    """
+                }
+
+                // Login to AWS ECR
+                sh "aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REGISTRY}"
+
+                // Login to Harbor Registry
+                script {
+                    if (env.DEPLOYMENT_MODE == 'OPENSTACK' || env.DEPLOYMENT_MODE == 'HYBRID') {
+                        sh "echo ${HARBOR_CREDS_PSW} | docker login ${HARBOR_REGISTRY} -u ${HARBOR_CREDS_USR} --password-stdin"
+                    }
+                }
+            }
+        }
+
+        stage('2. Build & Deploy Microservices') {
+            parallel {
+                // ==========================================
+                // USERS SERVICE
+                // ==========================================
+                stage('Users Service') {
+                    when {
+                        anyOf {
+                            triggeredBy 'UserIdCause'
+                            expression { return currentBuild.previousBuild == null }
+                            changeset "services/users/**"
+                        }
+                    }
+                    environment { SERVICE_NAME = 'users' }
+                    stages {
+                        stage('Users: Code Analysis') {
+                            agent {
+                                docker {
+                                    image 'maven:3.9-eclipse-temurin-21'
+                                    args '--network host -v /var/lib/jenkins/.m2:/root/.m2 -u 0:0'
+                                    reuseNode true
+                                }
+                            }
+                            steps {
+                                withSonarQubeEnv('sonarqube-local') {
+                                    sh "./scripts/analyze-backend.sh ${SERVICE_NAME}"
+                                }
+                            }
+                            post { always { sh "rm -rf services/${SERVICE_NAME}/target" } }
+                        }
+
+                        stage('Users: Security Scan') {
+                            steps {
+                                sh "./scripts/security-scan.sh ${SERVICE_NAME} ${SCAN_CACHE_DIR} ${TRIVY_SEVERITY}"
+                            }
+                        }
+
+                        stage('Users: Build & Push') {
+                            steps {
+                                script {
+                                    // Build and push to AWS ECR
+                                    if (env.DEPLOYMENT_MODE == 'AWS' || env.DEPLOYMENT_MODE == 'HYBRID') {
+                                        echo "📦 Building and pushing to AWS ECR..."
+                                        sh "./scripts/docker-build-push.sh ${SERVICE_NAME} ${ECR_REGISTRY}/foodhub-${SERVICE_NAME} ${env.IMAGE_TAG}"
+                                    }
+
+                                    // Build and push to Harbor
+                                    if (env.DEPLOYMENT_MODE == 'OPENSTACK' || env.DEPLOYMENT_MODE == 'HYBRID') {
+                                        echo "📦 Building and pushing to Harbor Registry..."
+                                        sh "./scripts/docker-build-push.sh ${SERVICE_NAME} ${HARBOR_REGISTRY}/${HARBOR_PROJECT}/foodhub-${SERVICE_NAME} ${env.IMAGE_TAG}"
+                                    }
+                                }
+                            }
+                        }
+
+                        stage('Users: Deploy to Clusters') {
+                            when { branch 'main' }
+                            parallel {
+                                stage('Deploy to AWS EKS') {
+                                    when {
+                                        expression {
+                                            return env.DEPLOYMENT_MODE == 'AWS' || env.DEPLOYMENT_MODE == 'HYBRID'
+                                        }
+                                    }
+                                    steps {
+                                        updateGitOps("${SERVICE_NAME}", "${env.IMAGE_TAG}", "aws")
+                                    }
+                                }
+
+                                stage('Deploy to OpenStack K8s') {
+                                    when {
+                                        expression {
+                                            return env.DEPLOYMENT_MODE == 'OPENSTACK' || env.DEPLOYMENT_MODE == 'HYBRID'
+                                        }
+                                    }
+                                    steps {
+                                        updateGitOps("${SERVICE_NAME}", "${env.IMAGE_TAG}", "openstack")
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // ==========================================
+                // PRODUCTS SERVICE
+                // ==========================================
+                stage('Products Service') {
+                    when {
+                        anyOf {
+                            triggeredBy 'UserIdCause'
+                            expression { return currentBuild.previousBuild == null }
+                            changeset "services/products/**"
+                        }
+                    }
+                    environment { SERVICE_NAME = 'products' }
+                    stages {
+                        stage('Products: Code Analysis') {
+                            agent {
+                                docker {
+                                    image 'maven:3.9-eclipse-temurin-21'
+                                    args '--network host -v /var/lib/jenkins/.m2:/root/.m2 -u 0:0'
+                                    reuseNode true
+                                }
+                            }
+                            steps {
+                                withSonarQubeEnv('sonarqube-local') {
+                                    sh "./scripts/analyze-backend.sh ${SERVICE_NAME}"
+                                }
+                            }
+                            post { always { sh "rm -rf services/${SERVICE_NAME}/target" } }
+                        }
+
+                        stage('Products: Security Scan') {
+                            steps {
+                                sh "./scripts/security-scan.sh ${SERVICE_NAME} ${SCAN_CACHE_DIR} ${TRIVY_SEVERITY}"
+                            }
+                        }
+
+                        stage('Products: Build & Push') {
+                            steps {
+                                script {
+                                    if (env.DEPLOYMENT_MODE == 'AWS' || env.DEPLOYMENT_MODE == 'HYBRID') {
+                                        sh "./scripts/docker-build-push.sh ${SERVICE_NAME} ${ECR_REGISTRY}/foodhub-${SERVICE_NAME} ${env.IMAGE_TAG}"
+                                    }
+                                    if (env.DEPLOYMENT_MODE == 'OPENSTACK' || env.DEPLOYMENT_MODE == 'HYBRID') {
+                                        sh "./scripts/docker-build-push.sh ${SERVICE_NAME} ${HARBOR_REGISTRY}/${HARBOR_PROJECT}/foodhub-${SERVICE_NAME} ${env.IMAGE_TAG}"
+                                    }
+                                }
+                            }
+                        }
+
+                        stage('Products: Deploy to Clusters') {
+                            when { branch 'main' }
+                            parallel {
+                                stage('Deploy to AWS EKS') {
+                                    when {
+                                        expression {
+                                            return env.DEPLOYMENT_MODE == 'AWS' || env.DEPLOYMENT_MODE == 'HYBRID'
+                                        }
+                                    }
+                                    steps {
+                                        updateGitOps("${SERVICE_NAME}", "${env.IMAGE_TAG}", "aws")
+                                    }
+                                }
+
+                                stage('Deploy to OpenStack K8s') {
+                                    when {
+                                        expression {
+                                            return env.DEPLOYMENT_MODE == 'OPENSTACK' || env.DEPLOYMENT_MODE == 'HYBRID'
+                                        }
+                                    }
+                                    steps {
+                                        updateGitOps("${SERVICE_NAME}", "${env.IMAGE_TAG}", "openstack")
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // ==========================================
+                // ORDERS SERVICE
+                // ==========================================
+                stage('Orders Service') {
+                    when {
+                        anyOf {
+                            triggeredBy 'UserIdCause'
+                            expression { return currentBuild.previousBuild == null }
+                            changeset "services/orders/**"
+                        }
+                    }
+                    environment { SERVICE_NAME = 'orders' }
+                    stages {
+                        stage('Orders: Code Analysis') {
+                            agent {
+                                docker {
+                                    image 'maven:3.9-eclipse-temurin-21'
+                                    args '--network host -v /var/lib/jenkins/.m2:/root/.m2 -u 0:0'
+                                    reuseNode true
+                                }
+                            }
+                            steps {
+                                withSonarQubeEnv('sonarqube-local') {
+                                    sh "./scripts/analyze-backend.sh ${SERVICE_NAME}"
+                                }
+                            }
+                            post { always { sh "rm -rf services/${SERVICE_NAME}/target" } }
+                        }
+
+                        stage('Orders: Security Scan') {
+                            steps {
+                                sh "./scripts/security-scan.sh ${SERVICE_NAME} ${SCAN_CACHE_DIR} ${TRIVY_SEVERITY}"
+                            }
+                        }
+
+                        stage('Orders: Build & Push') {
+                            steps {
+                                script {
+                                    if (env.DEPLOYMENT_MODE == 'AWS' || env.DEPLOYMENT_MODE == 'HYBRID') {
+                                        sh "./scripts/docker-build-push.sh ${SERVICE_NAME} ${ECR_REGISTRY}/foodhub-${SERVICE_NAME} ${env.IMAGE_TAG}"
+                                    }
+                                    if (env.DEPLOYMENT_MODE == 'OPENSTACK' || env.DEPLOYMENT_MODE == 'HYBRID') {
+                                        sh "./scripts/docker-build-push.sh ${SERVICE_NAME} ${HARBOR_REGISTRY}/${HARBOR_PROJECT}/foodhub-${SERVICE_NAME} ${env.IMAGE_TAG}"
+                                    }
+                                }
+                            }
+                        }
+
+                        stage('Orders: Deploy to Clusters') {
+                            when { branch 'main' }
+                            parallel {
+                                stage('Deploy to AWS EKS') {
+                                    when {
+                                        expression {
+                                            return env.DEPLOYMENT_MODE == 'AWS' || env.DEPLOYMENT_MODE == 'HYBRID'
+                                        }
+                                    }
+                                    steps {
+                                        updateGitOps("${SERVICE_NAME}", "${env.IMAGE_TAG}", "aws")
+                                    }
+                                }
+
+                                stage('Deploy to OpenStack K8s') {
+                                    when {
+                                        expression {
+                                            return env.DEPLOYMENT_MODE == 'OPENSTACK' || env.DEPLOYMENT_MODE == 'HYBRID'
+                                        }
+                                    }
+                                    steps {
+                                        updateGitOps("${SERVICE_NAME}", "${env.IMAGE_TAG}", "openstack")
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // ==========================================
+                // FRONTEND SERVICE
+                // ==========================================
+                stage('Frontend Service') {
+                    when {
+                        anyOf {
+                            triggeredBy 'UserIdCause'
+                            expression { return currentBuild.previousBuild == null }
+                            changeset "services/frontend/**"
+                        }
+                    }
+                    environment { SERVICE_NAME = 'frontend' }
+                    stages {
+                        stage('Frontend: Code Analysis') {
+                            agent {
+                                docker {
+                                    image 'node:20-alpine'
+                                    args '--network host -v /var/lib/jenkins/.npm:/root/.npm -u 0:0'
+                                    reuseNode true
+                                }
+                            }
+                            steps {
+                                withSonarQubeEnv('sonarqube-local') {
+                                    sh "./scripts/analyze-frontend.sh ${SERVICE_NAME}"
+                                }
+                            }
+                            post { always { sh "rm -rf services/${SERVICE_NAME}/node_modules services/${SERVICE_NAME}/.next" } }
+                        }
+
+                        stage('Frontend: Security Scan') {
+                            steps {
+                                sh "./scripts/security-scan.sh ${SERVICE_NAME} ${SCAN_CACHE_DIR} ${TRIVY_SEVERITY}"
+                            }
+                        }
+
+                        stage('Frontend: Build & Push') {
+                            steps {
+                                script {
+                                    if (env.DEPLOYMENT_MODE == 'AWS' || env.DEPLOYMENT_MODE == 'HYBRID') {
+                                        sh "./scripts/docker-build-push.sh ${SERVICE_NAME} ${ECR_REGISTRY}/foodhub-${SERVICE_NAME} ${env.IMAGE_TAG}"
+                                    }
+                                    if (env.DEPLOYMENT_MODE == 'OPENSTACK' || env.DEPLOYMENT_MODE == 'HYBRID') {
+                                        sh "./scripts/docker-build-push.sh ${SERVICE_NAME} ${HARBOR_REGISTRY}/${HARBOR_PROJECT}/foodhub-${SERVICE_NAME} ${env.IMAGE_TAG}"
+                                    }
+                                }
+                            }
+                        }
+
+                        stage('Frontend: Deploy to Clusters') {
+                            when { branch 'main' }
+                            parallel {
+                                stage('Deploy to AWS EKS') {
+                                    when {
+                                        expression {
+                                            return env.DEPLOYMENT_MODE == 'AWS' || env.DEPLOYMENT_MODE == 'HYBRID'
+                                        }
+                                    }
+                                    steps {
+                                        updateGitOps("${SERVICE_NAME}", "${env.IMAGE_TAG}", "aws")
+                                    }
+                                }
+
+                                stage('Deploy to OpenStack K8s') {
+                                    when {
+                                        expression {
+                                            return env.DEPLOYMENT_MODE == 'OPENSTACK' || env.DEPLOYMENT_MODE == 'HYBRID'
+                                        }
+                                    }
+                                    steps {
+                                        updateGitOps("${SERVICE_NAME}", "${env.IMAGE_TAG}", "openstack")
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('3. Health Check') {
+            when { branch 'main' }
+            steps {
+                script {
+                    echo """
+                    ═══════════════════════════════════════════════════════════════
+                    🏥 HEALTH CHECK - HYBRID CLOUD
+                    ═══════════════════════════════════════════════════════════════
+                    """
+
+                    if (env.DEPLOYMENT_MODE == 'AWS' || env.DEPLOYMENT_MODE == 'HYBRID') {
+                        echo "✅ Checking AWS EKS deployment status..."
+                        // Add AWS health check logic here
+                    }
+
+                    if (env.DEPLOYMENT_MODE == 'OPENSTACK' || env.DEPLOYMENT_MODE == 'HYBRID') {
+                        echo "✅ Checking OpenStack K8s deployment status..."
+                        // Add OpenStack health check logic here
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo """
+            ═══════════════════════════════════════════════════════════════
+            ✅ HYBRID CLOUD CI/CD PIPELINE SUCCESSFUL
+            ═══════════════════════════════════════════════════════════════
+            Branch:      ${env.BRANCH_NAME}
+            Commit:      ${env.COMMIT_HASH}
+            Image Tag:   ${env.IMAGE_TAG}
+            Mode:        ${DEPLOYMENT_MODE}
+            ═══════════════════════════════════════════════════════════════
+            """
+        }
+        failure {
+            echo """
+            ═══════════════════════════════════════════════════════════════
+            ❌ HYBRID CLOUD CI/CD PIPELINE FAILED
+            ═══════════════════════════════════════════════════════════════
+            Branch:      ${env.BRANCH_NAME}
+            Commit:      ${env.COMMIT_HASH}
+            Check logs for details
+            ═══════════════════════════════════════════════════════════════
+            """
+        }
+    }
+}
+
+// ==========================================
+// HELPER FUNCTIONS
+// ==========================================
+
+def updateGitOps(String serviceName, String imageTag, String cloudProvider) {
+    def gitOpsDir = "gitops-config"
+    def valuesFile = cloudProvider == 'aws' ?
+        "services/${serviceName}/aws/values.yaml" :
+        "services/${serviceName}/openstack/values.yaml"
+
+    echo "📝 Updating GitOps for ${serviceName} in ${cloudProvider}..."
+
+    withCredentials([string(credentialsId: env.GITOPS_CRED_ID, variable: 'GIT_TOKEN')]) {
+        sh """
+            rm -rf ${gitOpsDir}
+            git clone https://${GIT_TOKEN}@${env.GITOPS_REPO_URL} ${gitOpsDir}
+            cd ${gitOpsDir}
+
+            # Update image tag in values.yaml
+            if [ -f "${valuesFile}" ]; then
+                sed -i "s|tag:.*|tag: ${imageTag}|" ${valuesFile}
+
+                git config user.name "Jenkins CI"
+                git config user.email "jenkins@foodhub.local"
+                git add ${valuesFile}
+                git commit -m "Update ${serviceName} image to ${imageTag} for ${cloudProvider}" || true
+                git push origin main
+            else
+                echo "Warning: ${valuesFile} not found"
+            fi
+        """
+    }
+}

@@ -1,0 +1,316 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-federation-config
+  namespace: monitoring
+data:
+  prometheus.yml: |
+    # Prometheus Federation Configuration for Hybrid Cloud
+    # This Prometheus instance aggregates metrics from both AWS EKS and OpenStack K8s
+
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+      external_labels:
+        cluster: 'hybrid-cloud-federation'
+        environment: 'production'
+
+    # Alertmanager configuration
+    alerting:
+      alertmanagers:
+        - static_configs:
+            - targets:
+                - alertmanager:9093
+
+    # Load rules
+    rule_files:
+      - '/etc/prometheus/rules/*.yml'
+
+    # Scrape configurations
+    scrape_configs:
+      # ==========================================
+      # AWS EKS Prometheus Federation
+      # ==========================================
+      - job_name: 'federate-aws-eks'
+        honor_labels: true
+        metrics_path: '/federate'
+        params:
+          'match[]':
+            - '{job=~".+"}'  # Federate all metrics
+        static_configs:
+          - targets:
+              - 'prometheus-kube-prometheus-prometheus.monitoring.svc.cluster.local:9090'
+            labels:
+              cloud: 'aws'
+              cluster: 'foodhub-eks'
+              region: 'ap-southeast-1'
+
+      # ==========================================
+      # OpenStack Kubernetes Prometheus Federation
+      # ==========================================
+      - job_name: 'federate-openstack-k8s'
+        honor_labels: true
+        metrics_path: '/federate'
+        params:
+          'match[]':
+            - '{job=~".+"}'
+        static_configs:
+          - targets:
+              - 'REPLACE_WITH_OPENSTACK_PROMETHEUS_IP:9090'
+            labels:
+              cloud: 'openstack'
+              cluster: 'foodhub-openstack'
+              region: 'regionone'
+
+      # ==========================================
+      # Application Specific Metrics
+      # ==========================================
+
+      # Users Service - AWS
+      - job_name: 'foodhub-users-aws'
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names:
+                - foodhub
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            action: keep
+            regex: foodhub-users
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            action: keep
+            regex: true
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+          - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+            action: replace
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+            target_label: __address__
+          - action: labelmap
+            regex: __meta_kubernetes_pod_label_(.+)
+          - source_labels: [__meta_kubernetes_namespace]
+            action: replace
+            target_label: kubernetes_namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            action: replace
+            target_label: kubernetes_pod_name
+        static_configs:
+          - targets: []
+            labels:
+              cloud: 'aws'
+              service: 'users'
+
+      # Products Service - AWS
+      - job_name: 'foodhub-products-aws'
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names:
+                - foodhub
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            action: keep
+            regex: foodhub-products
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            action: keep
+            regex: true
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+          - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+            action: replace
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+            target_label: __address__
+          - action: labelmap
+            regex: __meta_kubernetes_pod_label_(.+)
+          - source_labels: [__meta_kubernetes_namespace]
+            action: replace
+            target_label: kubernetes_namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            action: replace
+            target_label: kubernetes_pod_name
+        static_configs:
+          - targets: []
+            labels:
+              cloud: 'aws'
+              service: 'products'
+
+      # Orders Service - AWS
+      - job_name: 'foodhub-orders-aws'
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names:
+                - foodhub
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            action: keep
+            regex: foodhub-orders
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            action: keep
+            regex: true
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+          - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+            action: replace
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+            target_label: __address__
+          - action: labelmap
+            regex: __meta_kubernetes_pod_label_(.+)
+          - source_labels: [__meta_kubernetes_namespace]
+            action: replace
+            target_label: kubernetes_namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            action: replace
+            target_label: kubernetes_pod_name
+        static_configs:
+          - targets: []
+            labels:
+              cloud: 'aws'
+              service: 'orders'
+
+      # ==========================================
+      # VPN Gateway Monitoring
+      # ==========================================
+      - job_name: 'vpn-gateway-openstack'
+        static_configs:
+          - targets:
+              - 'REPLACE_WITH_VPN_GATEWAY_IP:9100'
+            labels:
+              job: 'vpn-gateway'
+              cloud: 'openstack'
+              role: 'network'
+
+      # ==========================================
+      # Database Monitoring
+      # ==========================================
+      - job_name: 'postgresql-openstack'
+        static_configs:
+          - targets:
+              - 'REPLACE_WITH_OPENSTACK_PG_IP:9187'
+            labels:
+              job: 'postgresql'
+              cloud: 'openstack'
+              role: 'database'
+
+      - job_name: 'postgresql-aws-rds'
+        static_configs:
+          - targets:
+              - 'REPLACE_WITH_AWS_RDS_ENDPOINT:9187'
+            labels:
+              job: 'postgresql'
+              cloud: 'aws'
+              role: 'database'
+
+      # ==========================================
+      # Harbor Registry Monitoring
+      # ==========================================
+      - job_name: 'harbor-registry'
+        static_configs:
+          - targets:
+              - 'REPLACE_WITH_HARBOR_IP:9090'
+            labels:
+              job: 'harbor'
+              cloud: 'openstack'
+              role: 'registry'
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-hybrid-cloud-rules
+  namespace: monitoring
+data:
+  hybrid-cloud-alerts.yml: |
+    groups:
+      - name: hybrid_cloud_alerts
+        interval: 30s
+        rules:
+          # VPN Connectivity Alert
+          - alert: VPNTunnelDown
+            expr: up{job="vpn-gateway"} == 0
+            for: 5m
+            labels:
+              severity: critical
+              component: network
+            annotations:
+              summary: "VPN tunnel between clouds is down"
+              description: "VPN gateway at {{ $labels.instance }} is unreachable"
+
+          # Cross-cloud service availability
+          - alert: ServiceDownInCloud
+            expr: up{job=~"foodhub-.*"} == 0
+            for: 5m
+            labels:
+              severity: warning
+              component: application
+            annotations:
+              summary: "Service {{ $labels.service }} down in {{ $labels.cloud }}"
+              description: "Service {{ $labels.service }} in {{ $labels.cloud }} cloud is not responding"
+
+          # Database replication lag
+          - alert: DatabaseReplicationLag
+            expr: pg_replication_lag_seconds > 300
+            for: 5m
+            labels:
+              severity: warning
+              component: database
+            annotations:
+              summary: "Database replication lag is high"
+              description: "Replication lag is {{ $value }}s for {{ $labels.instance }}"
+
+          # High error rate in any cloud
+          - alert: HighErrorRate
+            expr: rate(http_requests_total{status=~"5.."}[5m]) > 0.05
+            for: 5m
+            labels:
+              severity: warning
+              component: application
+            annotations:
+              summary: "High error rate in {{ $labels.cloud }}"
+              description: "Error rate is {{ $value }} for {{ $labels.service }} in {{ $labels.cloud }}"
+
+          # Cross-cloud latency
+          - alert: HighCrossCloudLatency
+            expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 2
+            for: 10m
+            labels:
+              severity: warning
+              component: network
+            annotations:
+              summary: "High latency between clouds"
+              description: "95th percentile latency is {{ $value }}s"
+
+          # Container registry sync failure
+          - alert: RegistrySyncFailed
+            expr: harbor_replication_status{result="failure"} > 0
+            for: 15m
+            labels:
+              severity: warning
+              component: registry
+            annotations:
+              summary: "Harbor replication to ECR failed"
+              description: "Replication policy {{ $labels.policy_name }} has failed"
+
+          # Resource usage comparison between clouds
+          - alert: CloudResourceImbalance
+            expr: |
+              abs(
+                avg by (service) (container_memory_usage_bytes{cloud="aws"}) -
+                avg by (service) (container_memory_usage_bytes{cloud="openstack"})
+              ) / avg by (service) (container_memory_usage_bytes) > 0.5
+            for: 30m
+            labels:
+              severity: info
+              component: resource
+            annotations:
+              summary: "Resource usage imbalance between clouds"
+              description: "Service {{ $labels.service }} shows >50% resource difference between clouds"

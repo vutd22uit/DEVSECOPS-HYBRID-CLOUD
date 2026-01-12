@@ -1,0 +1,67 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: foodhub-eks-cluster
+  namespace: argocd
+  labels:
+    argocd.argoproj.io/secret-type: cluster
+type: Opaque
+stringData:
+  name: foodhub-eks
+  server: https://REPLACE_WITH_EKS_API_ENDPOINT:443
+  config: |
+    {
+      "awsAuthConfig": {
+        "clusterName": "foodhub-cluster",
+        "roleARN": "arn:aws:iam::257394468168:role/argocd-eks-access"
+      },
+      "tlsClientConfig": {
+        "insecure": false,
+        "caData": "REPLACE_WITH_BASE64_CA_CERT"
+      }
+    }
+---
+# AWS IAM Role for ArgoCD to access EKS
+# This should be created in AWS IAM and configured with EKS access
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aws-eks-config
+  namespace: argocd
+data:
+  instructions: |
+    To configure AWS EKS access for ArgoCD:
+
+    1. Create IAM Role for ArgoCD:
+       aws iam create-role --role-name argocd-eks-access \
+         --assume-role-policy-document '{
+           "Version": "2012-10-17",
+           "Statement": [{
+             "Effect": "Allow",
+             "Principal": {"Service": "eks.amazonaws.com"},
+             "Action": "sts:AssumeRole"
+           }]
+         }'
+
+    2. Attach EKS policy:
+       aws iam attach-role-policy --role-name argocd-eks-access \
+         --policy-arn arn:aws:iam::aws:policy/AmazonEKSClusterPolicy
+
+    3. Update EKS ConfigMap to allow ArgoCD access:
+       kubectl edit configmap aws-auth -n kube-system
+
+       Add this under mapRoles:
+       - rolearn: arn:aws:iam::257394468168:role/argocd-eks-access
+         username: argocd
+         groups:
+           - system:masters
+
+    4. Get EKS cluster CA certificate:
+       aws eks describe-cluster --name foodhub-cluster \
+         --query "cluster.certificateAuthority.data" --output text
+
+    5. Get EKS API endpoint:
+       aws eks describe-cluster --name foodhub-cluster \
+         --query "cluster.endpoint" --output text
+
+    6. Update the Secret above with correct values
