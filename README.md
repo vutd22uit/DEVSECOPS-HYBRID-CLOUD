@@ -1,529 +1,189 @@
-# 🚀 DevSecOps Hybrid Cloud CI/CD Pipeline
+# Enterprise DevSecOps Hybrid Cloud Platform (AWS + OpenStack)
 
-<div align="center">
+[![CI/CD Status](https://img.shields.io/badge/Pipeline-Passing-success?style=for-the-badge&logo=jenkins)](./CICD/)
+[![Infrastructure](https://img.shields.io/badge/Infrastructure-Hybrid-blue?style=for-the-badge&logo=terraform)](./terraform/)
+[![Kubernetes](https://img.shields.io/badge/Kubernetes-v1.28-326CE5?style=for-the-badge&logo=kubernetes)](./k8s/)
+[![License](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
 
-![DevSecOps](https://img.shields.io/badge/DevSecOps-Pipeline-blue?style=for-the-badge&logo=jenkins)
-![Kubernetes](https://img.shields.io/badge/Kubernetes-Hybrid-326CE5?style=for-the-badge&logo=kubernetes)
-![AWS](https://img.shields.io/badge/AWS-EKS-FF9900?style=for-the-badge&logo=amazon-aws)
-![OpenStack](https://img.shields.io/badge/OpenStack-Private-ED1944?style=for-the-badge&logo=openstack)
-
-**Xây dựng và Tối ưu Pipeline CI/CD DevSecOps cho Microservices trên Hybrid Cloud (AWS + OpenStack)**
-
-[🚀 Bắt đầu nhanh](#-bắt-đầu-nhanh-30-giây) • [📖 Hướng dẫn chi tiết](#-hướng-dẫn-sử-dụng-chi-tiết) • [🎯 Demo](#-kịch-bản-demo) • [❓ FAQ](#-câu-hỏi-thường-gặp)
-
-</div>
+> **A comprehensive, production-grade DevSecOps implementation demonstrating the convergence of Public Cloud (AWS) scalability and Private Cloud (OpenStack) data sovereignty.**
 
 ---
 
-## 📋 Mục Lục
+## 📑 Table of Contents
 
-1. [Giới thiệu dự án](#-giới-thiệu-dự-án)
-2. [Kiến trúc hệ thống](#-kiến-trúc-hệ-thống)
-3. [Yêu cầu hệ thống](#-yêu-cầu-hệ-thống)
-4. [Bắt đầu nhanh (30 giây)](#-bắt-đầu-nhanh-30-giây)
-5. [Hướng dẫn sử dụng chi tiết](#-hướng-dẫn-sử-dụng-chi-tiết)
-6. [Cấu trúc dự án](#-cấu-trúc-dự-án)
-7. [Kịch bản Demo](#-kịch-bản-demo)
-8. [Troubleshooting](#-troubleshooting)
-9. [Câu hỏi thường gặp](#-câu-hỏi-thường-gặp)
-
----
-
-## 🎯 Giới Thiệu Dự Án
-
-### Dự án này là gì?
-
-Đây là một **hệ thống CI/CD DevSecOps hoàn chỉnh** cho phép triển khai ứng dụng microservices lên **cả AWS (Public Cloud) và OpenStack (Private Cloud)** một cách tự động, bảo mật và hiệu quả.
-
-### Tại sao cần Hybrid Cloud?
-
-| Vấn đề | Giải pháp Hybrid Cloud |
-|--------|------------------------|
-| 🔒 Dữ liệu nhạy cảm cần lưu nội bộ | → Private Cloud (OpenStack) |
-| 🌍 Cần scale nhanh khi traffic tăng | → Public Cloud (AWS) |
-| 💰 Chi phí cao khi chỉ dùng Public | → Tối ưu 40-60% chi phí |
-| 🛡️ Quy định về bảo mật dữ liệu | → Tuân thủ với Private Cloud |
-
-### Dự án bao gồm những gì?
-
-```
-┌──────────────────────────────────────────────────────────────────┐
-│                    FoodHub - Ứng Dụng Demo                       │
-├──────────────────────────────────────────────────────────────────┤
-│  👤 Users Service    │  📦 Products Service  │  📋 Orders Service│
-│  (Quản lý user)      │  (Quản lý sản phẩm)   │  (Quản lý đơn)    │
-├──────────────────────────────────────────────────────────────────┤
-│                    🖥️ Frontend (Next.js)                         │
-└──────────────────────────────────────────────────────────────────┘
-```
+- [Executive Summary](#-executive-summary)
+- [System Architecture](#-system-architecture)
+- [Key Technologies](#-key-technologies)
+- [Core Features](#-core-features)
+- [Deployment Components](#-deployment-components)
+- [Prerequisites](#-prerequisites)
+- [Quick Start Guide](#-quick-start-guide)
+- [Documentation Map](#-documentation-map)
+- [Demo Scenarios](#-demo-scenarios)
 
 ---
 
-## 🏗️ Kiến Trúc Hệ Thống
+## 📋 Executive Summary
 
-```
-                              ┌─────────────────┐
-                              │   👨‍💻 Developer  │
-                              │   Push Code     │
-                              └────────┬────────┘
-                                       │
-                                       ▼
-                              ┌─────────────────┐
-                              │    🔧 Jenkins   │
-                              │   CI/CD Server  │
-                              └────────┬────────┘
-                                       │
-                    ┌──────────────────┼──────────────────┐
-                    │                  │                  │
-                    ▼                  ▼                  ▼
-           ┌───────────────┐  ┌───────────────┐  ┌───────────────┐
-           │ 🔍 SonarQube  │  │ 🛡️ Trivy      │  │ 🐳 Docker     │
-           │ Code Quality  │  │ Security Scan │  │ Build Image   │
-           └───────────────┘  └───────────────┘  └───────┬───────┘
-                                                         │
-                              ┌───────────────────────────┴───────────────────────────┐
-                              │                   Image Registry                       │
-                              │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐    │
-                              │  │ 📦 ECR      │  │ 🏠 Harbor   │  │ 🐙 GHCR    │    │
-                              │  │ (AWS)       │  │ (OpenStack) │  │ (GitHub)   │    │
-                              │  └─────────────┘  └─────────────┘  └─────────────┘    │
-                              └───────────────────────────┬───────────────────────────┘
-                                                          │
-                                                          ▼
-                              ┌─────────────────────────────────────────────────────────┐
-                              │                      🔄 ArgoCD                          │
-                              │                   GitOps Controller                      │
-                              └────────────────────────┬────────────────────────────────┘
-                                                       │
-                    ┌──────────────────────────────────┴──────────────────────────────────┐
-                    │                                                                      │
-                    ▼                                                                      ▼
-    ┌───────────────────────────────────┐              ┌───────────────────────────────────┐
-    │        ☁️ AWS (Public Cloud)       │              │      🏢 OpenStack (Private)       │
-    │  ┌─────────────────────────────┐  │              │  ┌─────────────────────────────┐  │
-    │  │      EKS Cluster            │  │     VPN      │  │    Kubernetes Cluster       │  │
-    │  │  ┌───┐ ┌───┐ ┌───┐ ┌───┐   │  │◄────────────►│  │  ┌───┐ ┌───┐ ┌───┐ ┌───┐   │  │
-    │  │  │ U │ │ P │ │ O │ │ F │   │  │              │  │  │ U │ │ P │ │ O │ │ F │   │  │
-    │  │  └───┘ └───┘ └───┘ └───┘   │  │              │  │  └───┘ └───┘ └───┘ └───┘   │  │
-    │  └─────────────────────────────┘  │              │  └─────────────────────────────┘  │
-    │  ┌─────────────────────────────┐  │              │  ┌─────────────────────────────┐  │
-    │  │      RDS PostgreSQL         │  │              │  │    PostgreSQL (VM)          │  │
-    │  └─────────────────────────────┘  │              │  └─────────────────────────────┘  │
-    └───────────────────────────────────┘              └───────────────────────────────────┘
+This project establishes a robust **DevSecOps CI/CD Pipeline** designed for hybrid cloud environments. It addresses modern enterprise challenges: ensuring data privacy for sensitive workloads (via OpenStack) while leveraging the elastic scalability of public clouds (via AWS) for customer-facing services.
+
+The solution employs a **"Shift-Left Security"** approach, integrating automated security scanning (SAST/DAST) directly into the CI/CD workflow, ensuring that every deployment is vetted for vulnerabilities before reaching production.
+
+---
+
+## 🏗 System Architecture
+
+The architecture implements a **Hub-and-Spoke** model with a centralized CI/CD control plane managing deployments across disparate cloud environments connected via a Site-to-Site VPN.
+
+### 1. High-Level Diagram
+
+```mermaid
+graph TD
+    subgraph "CI/CD Control Plane"
+        Dev[Developer] -->|Push Code| Git[GitHub]
+        Git -->|Webhook| Jenkins[Jenkins CI]
+        Jenkins -->|Quality Gate| Sonar[SonarQube]
+        Jenkins -->|Security Scan| Trivy[Trivy]
+        Jenkins -->|Build & Push| Registry[Docker Registry]
+    end
+
+    subgraph "Hybrid Connectivity (VPN Tunnel)"
+        Registry -.->|Sync Images| Harbor[Harbor Registry]
+        Argo[ArgoCD] -->|GitOps Sync| AWS_Cluster
+        Argo -->|GitOps Sync| OS_Cluster
+    end
+
+    subgraph "Public Cloud (AWS)"
+        AWS_Cluster[EKS Cluster]
+        AWS_LB[ALB Ingress]
+        AWS_DB[(RDS PostgreSQL)]
+    end
+
+    subgraph "Private Cloud (OpenStack)"
+        OS_Cluster[K8s Cluster]
+        OS_LB[NGINX Ingress]
+        OS_DB[(PostgreSQL VM)]
+    end
 ```
 
-**Chú thích:** U = Users, P = Products, O = Orders, F = Frontend
+### 2. Operational Flow
+1. **Continuous Integration**: Code commit triggers Jenkins pipeline -> Unit Tests -> SonarQube Analysis -> Trivy Security Scan -> Docker Build.
+2. **Artifact Management**: Docker images are pushed to GitHub Container Registry (Primary) and replicated to AWS ECR and internal Harbor registry.
+3. **Continuous Deployment**: ArgoCD detects manifest changes and synchronizes state to both EKS (AWS) and K8s (OpenStack) clusters.
+4. **Hybrid Networking**: Secure VPN facilitates encrypted communication between microservices across clouds.
 
 ---
 
-## 💻 Yêu Cầu Hệ Thống
+## 🛠 Key Technologies
 
-### Máy tính của bạn cần có:
-
-| Tool | Phiên bản | Mục đích | Cách cài đặt |
-|------|-----------|----------|--------------|
-| **Docker** | 20.10+ | Chạy containers | [Tải Docker Desktop](https://www.docker.com/products/docker-desktop/) |
-| **Git** | 2.30+ | Quản lý source code | `brew install git` (Mac) hoặc [Tải Git](https://git-scm.com/) |
-
-### (Tùy chọn) Nếu muốn deploy lên Cloud:
-
-| Tool | Mục đích | Cách cài đặt |
-|------|----------|--------------|
-| **kubectl** | Quản lý Kubernetes | `brew install kubectl` |
-| **AWS CLI** | Quản lý AWS | `brew install awscli` |
-| **eksctl** | Tạo EKS cluster | `brew install eksctl` |
-| **Helm** | Cài đặt packages K8s | `brew install helm` |
+| Category | Technology Stack |
+|----------|------------------|
+| **Clouds** | AWS (Public), OpenStack (Private) |
+| **Orchestration** | Kubernetes (EKS / Kubeadm) |
+| **CI/CD** | Jenkins, ArgoCD, GitHub Actions |
+| **Security** | Trivy (Container Security), SonarQube (Code Quality) |
+| **Infrastructure** | Terraform (IaC), Bash Scripts (Manual Ops) |
+| **Observability** | Prometheus (Metrics), Grafana (Visualization) |
+| **Registry** | AWS ECR, Harbor, GitHub Container Registry |
+| **Services** | Java Spring Boot (Backend), Next.js (Frontend), PostgreSQL |
 
 ---
 
-## 🚀 Bắt Đầu Nhanh (30 giây)
+## ✨ Core Features
 
-### Bước 1: Clone dự án
+### 🔐 Security & Compliance
+- **Automated Vulnerability Scanning**: Blocks pipelines if CVEs > Critical severity are found.
+- **Secrets Management**: K8s Secrets encrypted at rest.
+- **Network Policies**: Zero-trust architecture between microservices.
+
+### 🔄 Hybrid Cloud Operations
+- **Unified Management**: Single pane of glass for multi-cloud monitoring via Grafana Federation.
+- **Image Replication**: Automatic sync between Public ECR and Private Harbor registries.
+- **High Availability**: Failover capabilities between cloud providers.
+
+### ⚡ Developer Experience
+- **GitOps Workflow**: "Everything as Code" - all infra and app changes are version controlled.
+- **Rapid Feedback**: Immediate feedback loops via Jenkins and SonarQube dashboards.
+
+---
+
+## 📦 Deployment Components
+
+The project offers two distinct deployment methodologies catering to different operational needs:
+
+### Method A: Infrastructure as Code (Recommended)
+Using **Terraform** for reproducible, state-managed infrastructure provisioning.
+- **Path**: [`/terraform`](./terraform/)
+- **Best for**: Production environments, team collaboration.
+
+### Method B: Manual Ops Scripts (Educational)
+Using **Shell Scripts** & **CLI** tools for deep understanding of underlying resources.
+- **Path**: [`/manual-deployment`](./manual-deployment/)
+- **Guide**: [**NO-TERRAFORM-GUIDE.md**](./docs/NO-TERRAFORM-GUIDE.md)
+- **Best for**: Learning, debugging, environments where Terraform is restricted.
+
+---
+
+## 🚦 Prerequisites
+
+Before starting, ensure your environment meets the following requirements:
+
+- **Workstation**: Linux/MacOS (recommended) or Windows WSL2.
+- **Tools**: Docker, kubectl, aws-cli, openstack-cli, jq.
+- **Resources**:
+  - AWS Account with Admin privileges.
+  - Access to an OpenStack tenant (optional for hybrid features).
+
+---
+
+## ⚡ Quick Start Guide
+
+You can spin up the local CI/CD observability stack in minutes:
 
 ```bash
+# 1. Clone the repository
 git clone https://github.com/vutd22uit/DEVSECOPS-HYBRID-CLOUD.git
 cd DEVSECOPS-HYBRID-CLOUD
-```
 
-### Bước 2: Chạy Quick Start
-
-```bash
+# 2. Run the initialization script
+chmod +x quick-start.sh
 ./quick-start.sh
 ```
 
-### Bước 3: Mở trình duyệt
-
-| Service | URL | Tài khoản |
-|---------|-----|-----------|
-| 🔧 **Jenkins** | http://localhost:8080 | admin / admin123 |
-| 📊 **SonarQube** | http://localhost:9000 | admin / admin |
-
-**🎉 Vậy là xong! Jenkins và SonarQube đã chạy.**
+**Access Points:**
+- **Jenkins**: `http://localhost:8080` (Default: `admin`/`admin123`)
+- **SonarQube**: `http://localhost:9000` (Default: `admin`/`admin`)
+- **Frontend App**: `http://localhost:3000`
 
 ---
 
-## 📖 Hướng Dẫn Sử Dụng Chi Tiết
+## 📚 Documentation Map
 
-### Phần 1: Chạy CI/CD Pipeline Local
+Detailed guidebooks for every aspect of the system:
 
-#### 1.1. Cấu hình Jenkins Credentials
-
-Sau khi Jenkins khởi động, bạn cần thêm các credentials:
-
-1. Mở Jenkins: http://localhost:8080
-2. Đăng nhập: `admin` / `admin123`
-3. Vào **Manage Jenkins** → **Credentials** → **System** → **Global credentials**
-4. Thêm các credentials sau:
-
-| ID | Loại | Giá trị |
-|----|------|---------|
-| `github-pat` | Secret text | GitHub Personal Access Token |
-| `sonar-token` | Secret text | SonarQube Token (lấy từ http://localhost:9000) |
-
-#### 1.2. Tạo Pipeline mới
-
-1. Click **New Item**
-2. Nhập tên: `FoodHub-Pipeline`
-3. Chọn **Pipeline** → **OK**
-4. Trong phần **Pipeline**:
-   - **Definition**: Pipeline script from SCM
-   - **SCM**: Git
-   - **Repository URL**: `https://github.com/vutd22uit/DEVSECOPS-HYBRID-CLOUD.git`
-   - **Script Path**: `CICD/Jenkinsfile.no-terraform`
-5. Click **Save**
-6. Click **Build Now**
-
-#### 1.3. Xem kết quả
-
-Pipeline sẽ thực hiện:
-- ✅ **Build** các microservices
-- ✅ **Scan** code với SonarQube
-- ✅ **Scan** security với Trivy
-- ✅ **Push** images lên registry
+| Document | Description |Target Audience |
+|----------|-------------|----------------|
+| [**NO-TERRAFORM-GUIDE**](./docs/NO-TERRAFORM-GUIDE.md) | **★ Highlight**: How to deploy *without* Terraform. | Ops / Students |
+| [**DEPLOYMENT-GUIDE**](./docs/DEPLOYMENT-GUIDE.md) | Standard deployment procedures. | DevOps Engineers |
+| [**DEMO-SCENARIO**](./docs/DEMO-SCENARIO.md) | Step-by-step script for project presentation. | Presenters |
+| [**TROUBLESHOOTING**](./docs/TROUBLESHOOTING.md) | Solutions for common deployment errors. | Administrators |
 
 ---
 
-### Phần 2: Deploy lên OpenStack (Private Cloud)
+## 🎬 Demo Scenarios
 
-> ⚠️ **Yêu cầu**: Bạn cần có môi trường OpenStack sẵn
+We have prepared specific scenarios to demonstrate system capabilities:
 
-#### 2.1. Cấu hình OpenStack CLI
-
-```bash
-# Tạo file environment
-cat > ~/.openstack-foodhub.env << 'EOF'
-export OS_AUTH_URL="http://your-openstack:5000/v3"
-export OS_USERNAME="admin"
-export OS_PASSWORD="your-password"
-export OS_PROJECT_NAME="foodhub"
-export OS_USER_DOMAIN_NAME="Default"
-export OS_PROJECT_DOMAIN_NAME="Default"
-EOF
-
-# Load environment
-source ~/.openstack-foodhub.env
-
-# Kiểm tra kết nối
-openstack token issue
-```
-
-#### 2.2. Tạo Infrastructure
-
-```bash
-cd manual-deployment
-
-# Bước 1: Tạo Network (2 phút)
-./openstack/01-create-network.sh
-
-# Bước 2: Tạo Security Groups (1 phút)
-./openstack/02-create-security-groups.sh
-
-# Bước 3: Tạo Virtual Machines (15-20 phút)
-./openstack/03-create-vms.sh
-```
-
-#### 2.3. Cài đặt Kubernetes
-
-```bash
-# Bước 4: Cài K8s Master (10 phút)
-./kubernetes/01-install-k8s-master.sh
-
-# Bước 5: Cài K8s Workers (10 phút)
-./kubernetes/02-install-k8s-workers.sh
-
-# Kiểm tra cluster
-kubectl get nodes
-# Kết quả mong đợi: 3 nodes (1 master + 2 workers)
-```
-
-#### 2.4. Cài đặt các Services
-
-```bash
-# Harbor Registry
-./openstack/04-install-harbor.sh
-
-# ArgoCD (GitOps)
-./openstack/07-install-argocd.sh
-
-# Prometheus + Grafana (Monitoring)
-./openstack/08-install-prometheus-grafana.sh
-```
-
-#### 2.5. Deploy ứng dụng
-
-```bash
-# Deploy bằng Kustomize
-kubectl apply -k k8s/deployments/overlays/openstack/
-
-# Kiểm tra pods
-kubectl get pods -n foodhub
-```
-
----
-
-### Phần 3: Deploy lên AWS (Public Cloud)
-
-> ⚠️ **Yêu cầu**: Bạn cần có tài khoản AWS với quyền admin
-
-#### 3.1. Cấu hình AWS CLI
-
-```bash
-aws configure
-# Nhập: AWS Access Key ID
-# Nhập: AWS Secret Access Key
-# Nhập: Region (ap-southeast-1)
-# Nhập: Output format (json)
-
-# Kiểm tra
-aws sts get-caller-identity
-```
-
-#### 3.2. Tạo EKS Cluster
-
-```bash
-cd manual-deployment/aws
-
-# Tạo EKS cluster (15-20 phút)
-./01-create-eks-cluster.sh
-
-# Kết nối kubectl với EKS
-aws eks update-kubeconfig --name foodhub-eks --region ap-southeast-1
-
-# Kiểm tra
-kubectl get nodes
-```
-
-#### 3.3. Tạo ECR Repositories
-
-```bash
-./02-create-ecr-repos.sh
-```
-
-#### 3.4. Tạo RDS PostgreSQL
-
-```bash
-./03-create-rds-postgresql.sh
-```
-
-#### 3.5. Deploy ứng dụng
-
-```bash
-kubectl apply -k k8s/deployments/overlays/aws/
-```
-
----
-
-### Phần 4: Thiết lập Hybrid Cloud (AWS + OpenStack)
-
-#### 4.1. Kết nối VPN giữa 2 Cloud
-
-```bash
-# Trên AWS
-cd manual-deployment/aws
-./01-create-vpn.sh
-
-# Trên OpenStack
-cd manual-deployment/openstack
-./06-configure-vpn.sh
-```
-
-#### 4.2. Cấu hình Harbor Sync với ECR
-
-```bash
-./openstack/09-configure-harbor-sync.sh
-```
-
-#### 4.3. Cấu hình ArgoCD Multi-cluster
-
-```bash
-# Đăng ký cả 2 clusters với ArgoCD
-argocd cluster add aws-eks --name aws-production
-argocd cluster add openstack-k8s --name openstack-production
-```
-
----
-
-## 📁 Cấu Trúc Dự Án
-
-```
-DEVSECOPS-HYBRID-CLOUD/
-│
-├── 📂 services/                    # Source code các microservices
-│   ├── users/                      # 👤 Service quản lý users (Java Spring Boot)
-│   ├── products/                   # 📦 Service quản lý products (Java Spring Boot)
-│   ├── orders/                     # 📋 Service quản lý orders (Java Spring Boot)
-│   └── frontend/                   # 🖥️ Web UI (Next.js React)
-│
-├── 📂 CICD/                        # CI/CD Pipelines
-│   ├── Jenkinsfile                 # Pipeline cơ bản
-│   ├── Jenkinsfile.hybrid-cloud    # Pipeline đầy đủ cho Hybrid
-│   └── Jenkinsfile.no-terraform    # Pipeline không dùng Terraform
-│
-├── 📂 k8s/                         # Kubernetes manifests
-│   ├── deployments/
-│   │   ├── base/                   # Base manifests (Kustomize)
-│   │   └── overlays/
-│   │       ├── aws/                # AWS-specific configs
-│   │       └── openstack/          # OpenStack-specific configs
-│   └── argocd/                     # ArgoCD configurations
-│
-├── 📂 manual-deployment/           # 🎯 Scripts triển khai thủ công (No Terraform!)
-│   ├── aws/                        # AWS scripts (EKS, ECR, RDS)
-│   ├── openstack/                  # OpenStack scripts (Network, VMs, Harbor)
-│   └── kubernetes/                 # K8s installation scripts
-│
-├── 📂 observability/               # Monitoring configs
-│   └── prometheus-federation.yaml  # Prometheus cho Hybrid Cloud
-│
-├── 📂 docs/                        # 📖 Tài liệu
-│   ├── NO-TERRAFORM-GUIDE.md       # Hướng dẫn deploy không Terraform
-│   ├── DEMO-SCENARIO.md            # Kịch bản demo 5 phút
-│   └── TROUBLESHOOTING.md          # Xử lý lỗi thường gặp
-│
-├── docker-compose.yml              # Chạy Jenkins + SonarQube local
-├── quick-start.sh                  # Script khởi động nhanh
-└── README.md                       # 📄 File này!
-```
-
----
-
-## 🎯 Kịch Bản Demo
-
-### Demo 5 phút cho Ban Giám Khảo
-
-| Thời gian | Hoạt động | "Wow" Factor |
-|-----------|-----------|--------------|
-| 0:00-0:30 | Show infrastructure scripts | "Tạo cả cluster chỉ 1 lệnh" |
-| 0:30-1:30 | Push code → Jenkins Pipeline | "Auto security scan + multi-registry" |
-| 1:30-2:30 | ArgoCD sync | "GitOps: Self-healing deployment" |
-| 2:30-3:30 | Grafana Dashboard | "Unified monitoring cả 2 clouds" |
-| 3:30-4:30 | Kill pod demo | "Auto-recovery trong 5 giây" |
-| 4:30-5:00 | Show Frontend App | "App chạy mượt mà" |
-
-👉 **Chi tiết**: Xem [docs/DEMO-SCENARIO.md](docs/DEMO-SCENARIO.md)
-
----
-
-## 🔧 Troubleshooting
-
-### Lỗi thường gặp và cách khắc phục:
-
-#### ❌ Jenkins không khởi động được
-
-```bash
-# Kiểm tra logs
-docker logs jenkins
-
-# Thử restart
-docker-compose down
-docker-compose up -d
-```
-
-#### ❌ Không kết nối được OpenStack
-
-```bash
-# Kiểm tra environment
-env | grep OS_
-
-# Load lại environment
-source ~/.openstack-foodhub.env
-
-# Test token
-openstack token issue
-```
-
-#### ❌ Pods ở trạng thái CrashLoopBackOff
-
-```bash
-# Xem logs
-kubectl logs <pod-name> -n foodhub
-
-# Xem events
-kubectl describe pod <pod-name> -n foodhub
-```
-
-#### ❌ ArgoCD sync failed
-
-```bash
-# Xem chi tiết
-argocd app get <app-name>
-
-# Force sync
-argocd app sync <app-name> --force
-```
-
-👉 **Xem thêm**: [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)
-
----
-
-## ❓ Câu Hỏi Thường Gặp
-
-### Q1: Tôi cần có OpenStack/AWS thật mới chạy được?
-
-**A**: Không! Bạn có thể chạy Jenkins + SonarQube local bằng `./quick-start.sh`. Chỉ cần Docker là đủ.
-
-### Q2: Terraform ở đâu?
-
-**A**: Dự án này hỗ trợ **2 cách** triển khai:
-- 🔧 **Manual Scripts** (Khuyên dùng): Dễ hiểu, dễ debug
-- 📦 **Terraform**: Có trong thư mục `/terraform`
-
-### Q3: Chi phí AWS ước tính bao nhiêu?
-
-**A**: Với cấu hình demo:
-- EKS: ~$73/tháng (cluster fee)
-- EC2 (3 nodes t3.medium): ~$90/tháng
-- RDS (db.t3.micro): ~$15/tháng
-- **Tổng**: ~$180/tháng
-
-### Q4: Làm sao để contribute?
-
-**A**: 
-1. Fork repository
-2. Tạo branch mới
-3. Commit changes
-4. Tạo Pull Request
-
----
-
-## 📞 Liên Hệ & Hỗ Trợ
-
-- **Author**: Vu Truong Doan
-- **Email**: vutd22uit@example.com
-- **GitHub**: [@vutd22uit](https://github.com/vutd22uit)
-
----
-
-## 📜 License
-
-MIT License - Xem file [LICENSE](LICENSE) để biết thêm chi tiết.
+1. **"The Shift-Left"**: Commit "bad code" and watch the pipeline block deployment due to security/quality failure.
+2. **"The Hybrid Sync"**: Deploy a new version and watch ArgoCD update pods on AWS and OpenStack simultaneously.
+3. **"The Chaos"**: Terminate a Private Cloud node and verify service continuity.
 
 ---
 
 <div align="center">
 
-**⭐ Nếu dự án hữu ích, hãy cho một Star nhé! ⭐**
+**Project maintained by [Vu Truong Doan]**
 
-Made with ❤️ by Vu Truong Doan
+*Open Source for the Community. Contributions are Welcome!*
 
 </div>
