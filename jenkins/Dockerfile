@@ -72,11 +72,11 @@ RUN jenkins-plugin-cli --plugin-file /usr/share/jenkins/ref/plugins.txt
 # ================================================================= #
 # Giai đoạn 4: Cấu hình JCasC (Configuration as Code)
 # ================================================================= #
-# Copy cấu hình JCasC
-COPY casc.yaml /var/jenkins_home/casc_configs/casc.yaml
+# Copy cấu hình JCasC vào thư mục reference (sẽ được copy vào JENKINS_HOME khi khởi động)
+COPY casc.yaml /usr/share/jenkins/ref/casc_configs/casc.yaml
 
 # Thiết lập biến môi trường cho JCasC
-ENV CASC_JENKINS_CONFIG=/var/jenkins_home/casc_configs
+ENV CASC_JENKINS_CONFIG=/var/jenkins_home/casc_configs/casc.yaml
 ENV JAVA_OPTS="-Djenkins.install.runSetupWizard=false"
 
 # ================================================================= #
