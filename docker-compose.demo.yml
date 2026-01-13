@@ -50,6 +50,9 @@ services:
       - SPRING_DATASOURCE_USERNAME=foodhub_admin
       - SPRING_DATASOURCE_PASSWORD=FoodHub12345
       - SERVER_PORT=8082
+      - JWT_SECRET_KEY=dGhpcy1pcy1hLXNlY3JldC1rZXktZm9yLWp3dC1hdXRoZW50aWNhdGlvbi1pbi1kZXZzZWNvcHMtcHJvamVjdC1tdXN0LWJlLXZlcnktbG9uZy1hbmQtc2VjdXJl
+      - JWT_EXPIRATION_MS=86400000
+      - TZ=Asia/Ho_Chi_Minh
     depends_on:
       postgresql:
         condition: service_healthy
@@ -76,6 +79,9 @@ services:
       - SPRING_DATASOURCE_USERNAME=foodhub_admin
       - SPRING_DATASOURCE_PASSWORD=FoodHub12345
       - SERVER_PORT=8083
+      - JWT_SECRET_KEY=dGhpcy1pcy1hLXNlY3JldC1rZXktZm9yLWp3dC1hdXRoZW50aWNhdGlvbi1pbi1kZXZzZWNvcHMtcHJvamVjdC1tdXN0LWJlLXZlcnktbG9uZy1hbmQtc2VjdXJl
+      - JWT_EXPIRATION_MS=86400000
+      - TZ=Asia/Ho_Chi_Minh
     depends_on:
       postgresql:
         condition: service_healthy
@@ -102,8 +108,11 @@ services:
       - SPRING_DATASOURCE_USERNAME=foodhub_admin
       - SPRING_DATASOURCE_PASSWORD=FoodHub12345
       - SERVER_PORT=8084
+      - JWT_SECRET_KEY=dGhpcy1pcy1hLXNlY3JldC1rZXktZm9yLWp3dC1hdXRoZW50aWNhdGlvbi1pbi1kZXZzZWNvcHMtcHJvamVjdC1tdXN0LWJlLXZlcnktbG9uZy1hbmQtc2VjdXJl
+      - JWT_EXPIRATION_MS=86400000
       - USERS_SERVICE_URL=http://users-service:8082
       - PRODUCTS_SERVICE_URL=http://products-service:8083
+      - TZ=Asia/Ho_Chi_Minh
     depends_on:
       postgresql:
         condition: service_healthy
