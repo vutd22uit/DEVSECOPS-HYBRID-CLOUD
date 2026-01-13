@@ -56,69 +56,49 @@ unclassified:
                 remote: "https://github.com/vutd22uit/DEVSECOPS-HYBRID-CLOUD.git"
                 credentialsId: "github-pat"
 
-credentials:
-  system:
-    domainCredentials:
-      - credentials:
-          - string:
-              scope: GLOBAL
-              id: "sonar-token"
-              secret: "${SONAR_TOKEN}"
-              description: "SonarQube Authentication Token"
-          - string:
-              scope: GLOBAL
-              id: "github-pat"
-              secret: "${GITOPS_TOKEN}"
-              description: "GitHub Personal Access Token"
-          - string:
-              scope: GLOBAL
-              id: "harbor-registry-url"
-              secret: "${HARBOR_REGISTRY_URL}"
-              description: "Harbor Registry URL"
-          - usernamePassword:
-              scope: GLOBAL
-              id: "harbor-credentials"
-              username: "${HARBOR_USERNAME}"
-              password: "${HARBOR_PASSWORD}"
-              description: "Harbor Registry Credentials"
-          - usernamePassword:
-              scope: GLOBAL
-              id: "aws-credentials"
-              username: "${AWS_ACCESS_KEY_ID}"
-              password: "${AWS_SECRET_ACCESS_KEY}"
-              description: "AWS Access Credentials"
+# Credentials will be added manually via Jenkins UI
+# credentials:
+#   system:
+#     domainCredentials:
+#       - credentials:
+#           - string:
+#               scope: GLOBAL
+#               id: "sonar-token"
+#               secret: "${SONAR_TOKEN}"
+#               description: "SonarQube Authentication Token"
 
-jobs:
-  - script: >
-      pipelineJob('FoodHub-Hybrid-Pipeline') {
-        description('🚀 Hybrid Cloud CI/CD Pipeline for FoodHub Microservices')
-        
-        definition {
-          cpsScm {
-            scm {
-              git {
-                remote {
-                  url('https://github.com/vutd22uit/DEVSECOPS-HYBRID-CLOUD.git')
-                  credentials('github-pat')
-                }
-                branch('*/main')
-              }
-            }
-            scriptPath('CICD/Jenkinsfile.hybrid-cloud')
-          }
-        }
-        
-        triggers {
-          githubPush()
-        }
-        
-        properties {
-          buildDiscarder {
-            strategy {
-              logRotator {
-                numToKeepStr('10')
-              }
-            }
-          }
-        }
-      }
+# Jobs will be created manually or via Jenkins UI  
+# jobs:
+#   - script: >
+#       pipelineJob('FoodHub-Hybrid-Pipeline') {
+#         description('🚀 Hybrid Cloud CI/CD Pipeline for FoodHub Microservices')
+#         
+#         definition {
+#           cpsScm {
+#             scm {
+#               git {
+#                 remote {
+#                   url('https://github.com/vutd22uit/DEVSECOPS-HYBRID-CLOUD.git')
+#                   credentials('github-pat')
+#                 }
+#                 branch('*/main')
+#               }
+#             }
+#             scriptPath('CICD/Jenkinsfile.hybrid-cloud')
+#           }
+#         }
+#         
+#         triggers {
+#           githubPush()
+#         }
+#         
+#         properties {
+#           buildDiscarder {
+#             strategy {
+#               logRotator {
+#                 numToKeepStr('10')
+#               }
+#             }
+#           }
+#         }
+#       }

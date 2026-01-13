@@ -173,14 +173,7 @@ services:
     environment:
       - JAVA_OPTS=-Djenkins.install.runSetupWizard=false
       - JENKINS_ADMIN_ID=admin
-      - JENKINS_ADMIN_PASSWORD=${JENKINS_ADMIN_PASSWORD:-admin123}
-      - SONAR_TOKEN=${SONAR_TOKEN}
-      - GITOPS_TOKEN=${GITOPS_TOKEN}
-      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
-      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
-      - HARBOR_USERNAME=${HARBOR_USERNAME}
-      - HARBOR_PASSWORD=${HARBOR_PASSWORD}
-      - HARBOR_REGISTRY_URL=${HARBOR_REGISTRY_URL}
+      - JENKINS_ADMIN_PASSWORD=admin123
     networks:
       - foodhub-network
 
