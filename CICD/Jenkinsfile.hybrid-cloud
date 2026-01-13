@@ -155,26 +155,17 @@ pipeline {
 
                         stage('Users: Deploy to Clusters') {
                             when { branch 'main' }
-                            parallel {
-                                stage('Deploy to AWS EKS') {
-                                    when {
-                                        expression {
-                                            return env.DEPLOYMENT_MODE == 'AWS' || env.DEPLOYMENT_MODE == 'HYBRID'
+                            steps {
+                                script {
+                                    if (env.DEPLOYMENT_MODE == 'AWS' || env.DEPLOYMENT_MODE == 'HYBRID') {
+                                        stage('Deploy Users to AWS') {
+                                            updateGitOps("${SERVICE_NAME}", "${env.IMAGE_TAG}", "aws")
                                         }
                                     }
-                                    steps {
-                                        updateGitOps("${SERVICE_NAME}", "${env.IMAGE_TAG}", "aws")
-                                    }
-                                }
-
-                                stage('Deploy to OpenStack K8s') {
-                                    when {
-                                        expression {
-                                            return env.DEPLOYMENT_MODE == 'OPENSTACK' || env.DEPLOYMENT_MODE == 'HYBRID'
+                                    if (env.DEPLOYMENT_MODE == 'OPENSTACK' || env.DEPLOYMENT_MODE == 'HYBRID') {
+                                        stage('Deploy Users to OpenStack') {
+                                            updateGitOps("${SERVICE_NAME}", "${env.IMAGE_TAG}", "openstack")
                                         }
-                                    }
-                                    steps {
-                                        updateGitOps("${SERVICE_NAME}", "${env.IMAGE_TAG}", "openstack")
                                     }
                                 }
                             }
@@ -247,26 +238,17 @@ pipeline {
 
                         stage('Products: Deploy to Clusters') {
                             when { branch 'main' }
-                            parallel {
-                                stage('Deploy to AWS EKS') {
-                                    when {
-                                        expression {
-                                            return env.DEPLOYMENT_MODE == 'AWS' || env.DEPLOYMENT_MODE == 'HYBRID'
+                            steps {
+                                script {
+                                    if (env.DEPLOYMENT_MODE == 'AWS' || env.DEPLOYMENT_MODE == 'HYBRID') {
+                                        stage('Deploy Products to AWS') {
+                                            updateGitOps("${SERVICE_NAME}", "${env.IMAGE_TAG}", "aws")
                                         }
                                     }
-                                    steps {
-                                        updateGitOps("${SERVICE_NAME}", "${env.IMAGE_TAG}", "aws")
-                                    }
-                                }
-
-                                stage('Deploy to OpenStack K8s') {
-                                    when {
-                                        expression {
-                                            return env.DEPLOYMENT_MODE == 'OPENSTACK' || env.DEPLOYMENT_MODE == 'HYBRID'
+                                    if (env.DEPLOYMENT_MODE == 'OPENSTACK' || env.DEPLOYMENT_MODE == 'HYBRID') {
+                                        stage('Deploy Products to OpenStack') {
+                                            updateGitOps("${SERVICE_NAME}", "${env.IMAGE_TAG}", "openstack")
                                         }
-                                    }
-                                    steps {
-                                        updateGitOps("${SERVICE_NAME}", "${env.IMAGE_TAG}", "openstack")
                                     }
                                 }
                             }
@@ -339,26 +321,17 @@ pipeline {
 
                         stage('Orders: Deploy to Clusters') {
                             when { branch 'main' }
-                            parallel {
-                                stage('Deploy to AWS EKS') {
-                                    when {
-                                        expression {
-                                            return env.DEPLOYMENT_MODE == 'AWS' || env.DEPLOYMENT_MODE == 'HYBRID'
+                            steps {
+                                script {
+                                    if (env.DEPLOYMENT_MODE == 'AWS' || env.DEPLOYMENT_MODE == 'HYBRID') {
+                                        stage('Deploy Orders to AWS') {
+                                            updateGitOps("${SERVICE_NAME}", "${env.IMAGE_TAG}", "aws")
                                         }
                                     }
-                                    steps {
-                                        updateGitOps("${SERVICE_NAME}", "${env.IMAGE_TAG}", "aws")
-                                    }
-                                }
-
-                                stage('Deploy to OpenStack K8s') {
-                                    when {
-                                        expression {
-                                            return env.DEPLOYMENT_MODE == 'OPENSTACK' || env.DEPLOYMENT_MODE == 'HYBRID'
+                                    if (env.DEPLOYMENT_MODE == 'OPENSTACK' || env.DEPLOYMENT_MODE == 'HYBRID') {
+                                        stage('Deploy Orders to OpenStack') {
+                                            updateGitOps("${SERVICE_NAME}", "${env.IMAGE_TAG}", "openstack")
                                         }
-                                    }
-                                    steps {
-                                        updateGitOps("${SERVICE_NAME}", "${env.IMAGE_TAG}", "openstack")
                                     }
                                 }
                             }
@@ -431,26 +404,17 @@ pipeline {
 
                         stage('Frontend: Deploy to Clusters') {
                             when { branch 'main' }
-                            parallel {
-                                stage('Deploy to AWS EKS') {
-                                    when {
-                                        expression {
-                                            return env.DEPLOYMENT_MODE == 'AWS' || env.DEPLOYMENT_MODE == 'HYBRID'
+                            steps {
+                                script {
+                                    if (env.DEPLOYMENT_MODE == 'AWS' || env.DEPLOYMENT_MODE == 'HYBRID') {
+                                        stage('Deploy Frontend to AWS') {
+                                            updateGitOps("${SERVICE_NAME}", "${env.IMAGE_TAG}", "aws")
                                         }
                                     }
-                                    steps {
-                                        updateGitOps("${SERVICE_NAME}", "${env.IMAGE_TAG}", "aws")
-                                    }
-                                }
-
-                                stage('Deploy to OpenStack K8s') {
-                                    when {
-                                        expression {
-                                            return env.DEPLOYMENT_MODE == 'OPENSTACK' || env.DEPLOYMENT_MODE == 'HYBRID'
+                                    if (env.DEPLOYMENT_MODE == 'OPENSTACK' || env.DEPLOYMENT_MODE == 'HYBRID') {
+                                        stage('Deploy Frontend to OpenStack') {
+                                            updateGitOps("${SERVICE_NAME}", "${env.IMAGE_TAG}", "openstack")
                                         }
-                                    }
-                                    steps {
-                                        updateGitOps("${SERVICE_NAME}", "${env.IMAGE_TAG}", "openstack")
                                     }
                                 }
                             }
