@@ -171,9 +171,8 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./scripts:/var/jenkins_home/scripts:ro
     environment:
-      - JAVA_OPTS=-Djenkins.install.runSetupWizard=false
-      - JENKINS_ADMIN_ID=admin
-      - JENKINS_ADMIN_PASSWORD=admin123
+      # - JAVA_OPTS=-Djenkins.install.runSetupWizard=false (Enable Setup Wizard)
+      - DOCKER_HOST=unix:///var/run/docker.sock
     networks:
       - foodhub-network
 

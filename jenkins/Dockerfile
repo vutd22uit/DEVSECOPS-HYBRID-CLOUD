@@ -63,23 +63,13 @@ RUN curl -sSL -o argocd-linux-amd64 https://github.com/argoproj/argo-cd/releases
   rm argocd-linux-amd64
 
 # ================================================================= #
-# Giai đoạn 3: Cài đặt Jenkins Plugins
+# Giai đoạn 3: Cài đặt Jenkins Plugins (Optional - có thể bỏ nếu muốn cài tay)
 # ================================================================= #
 # Copy danh sách plugins và cài đặt
 COPY plugins.txt /usr/share/jenkins/ref/plugins.txt
 RUN jenkins-plugin-cli --plugin-file /usr/share/jenkins/ref/plugins.txt
 
 # ================================================================= #
-# Giai đoạn 4: Cấu hình JCasC (Configuration as Code)
-# ================================================================= #
-# Copy cấu hình JCasC vào thư mục reference (sẽ được copy vào JENKINS_HOME khi khởi động)
-COPY casc.yaml /usr/share/jenkins/ref/casc_configs/casc.yaml
-
-# Thiết lập biến môi trường cho JCasC
-ENV CASC_JENKINS_CONFIG=/var/jenkins_home/casc_configs/casc.yaml
-ENV JAVA_OPTS="-Djenkins.install.runSetupWizard=false"
-
-# ================================================================= #
-# Giai đoạn 5: Chuyển về user jenkins
+# Giai đoạn 4: Chuyển về user jenkins
 # ================================================================= #
 USER jenkins
